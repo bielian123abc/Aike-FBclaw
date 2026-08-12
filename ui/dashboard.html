@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aike-FBclaw</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','PingFang TC',sans-serif;background:#0f1419;color:#e7e9ea;overflow:hidden;height:100vh;font-size:13px}
+.header{background:#1a1a2e;padding:6px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2f3336;min-height:40px;flex-shrink:0}
+.header h1{font-size:15px;font-weight:600;color:#1d9bf0}
+.header .sys-info{display:flex;gap:16px;font-size:11px;color:#71767b}
+.header .sys-info span.good{color:#00ba7c}
+.header .sys-info span.warn{color:#f5a623}
+.header .sys-info span.bad{color:#f4212e}
+.main{display:flex;height:calc(100vh - 64px)}
+.sidebar{width:140px;background:#1a1a2e;border-right:1px solid #2f3336;display:flex;flex-direction:column;padding-top:8px;gap:1px;flex-shrink:0}
+.sidebar button{width:100%;height:38px;border:none;background:transparent;cursor:pointer;font-size:12px;color:#71767b;transition:all .12s;display:flex;align-items:center;gap:8px;padding:0 14px;text-align:left;white-space:nowrap}
+.sidebar button:hover{background:#2f3336;color:#e7e9ea}
+.sidebar button.active{background:#1d9bf0;color:#fff;font-weight:600}
+.panel{display:none;flex:1;overflow:hidden;flex-direction:column}
+.panel.active{display:flex}
+
+/* 按钮 */
+.btn{padding:5px 12px;border:none;border-radius:5px;cursor:pointer;font-size:11px;white-space:nowrap;font-weight:500}
+.btn-blue{background:#1d9bf0;color:#fff}.btn-blue:hover{background:#1a8cd8}
+.btn-green{background:#00ba7c;color:#fff}.btn-green:hover{background:#00a06b}
+.btn-red{background:#f4212e;color:#fff}.btn-red:hover{background:#d91a25}
+.btn-gray{background:#2f3336;color:#e7e9ea}.btn-gray:hover{background:#3e4144}
+.btn-outline{background:transparent;border:1px solid #2f3336;color:#e7e9ea}.btn-outline:hover{background:#1e2732;border-color:#1d9bf0}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+
+/* 徽章 */
+.badge{padding:1px 7px;border-radius:8px;font-size:10px;font-weight:500}
+.bg-green{background:#00321e;color:#00ba7c}
+.bg-blue{background:#001a3d;color:#1d9bf0}
+.bg-red{background:#3d0000;color:#f4212e}
+.bg-gray{background:#2f3336;color:#71767b}
+.bg-purple{background:#25003d;color:#c084fc}
+.bg-yellow{background:#3d2e00;color:#f5a623}
+.bg-orange{background:#3d1a00;color:#f5a623}
+
+/* 输入 */
+input,select,textarea{padding:6px 10px;border:1px solid #2f3336;border-radius:5px;background:#0f1419;color:#e7e9ea;font-size:12px;outline:none;font-family:inherit}
+input:focus,select:focus{border-color:#1d9bf0}
+textarea{resize:none}
+
+/* 表格 */
+.table-wrap{flex:1;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{text-align:left;padding:6px 10px;border-bottom:1px solid #2f3336;color:#71767b;font-weight:500;font-size:10px;text-transform:uppercase;position:sticky;top:0;background:#15202b;z-index:1}
+td{padding:6px 10px;border-bottom:1px solid #1e2732}
+tr:hover{background:#1e2732}
+tr.selected{background:#001a3d;outline:1px solid #1d9bf0}
+
+/* 工具栏 */
+.toolbar{display:flex;gap:8px;padding:8px 12px;background:#1a1a2e;border-bottom:1px solid #2f3336;align-items:center;flex-wrap:wrap;flex-shrink:0}
+
+/* 空状态 */
+.empty{text-align:center;color:#71767b;padding:40px 20px;font-size:12px}
+.empty .icon{font-size:36px;margin-bottom:10px}
+
+/* 卡片 */
+.card{background:#15202b;border:1px solid #2f3336;border-radius:8px;padding:14px}
+
+/* ===== 仪表盘 ===== */
+.dash{display:flex;flex-direction:column;gap:12px;padding:12px;height:100%;overflow:auto}
+.summary-cards{display:flex;gap:12px;flex-wrap:wrap}
+.summary-item{flex:1;min-width:100px;background:#15202b;border:1px solid #2f3336;border-radius:8px;padding:14px;text-align:center}
+.summary-item .num{font-size:28px;font-weight:700}
+.summary-item .label{font-size:11px;color:#71767b;margin-top:2px}
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1;overflow:hidden}
+.dash-card{background:#15202b;border:1px solid #2f3336;border-radius:8px;padding:14px;overflow:auto}
+.dash-card h3{font-size:12px;margin-bottom:10px;color:#e7e9ea;display:flex;align-items:center;gap:8px}
+.dash-card.full{grid-column:1/-1}
+
+/* ===== 任务面板 ===== */
+.task-layout{display:flex;flex-direction:column;height:100%}
+.task-create{background:#1a1a2e;border-bottom:1px solid #2f3336;padding:12px;flex-shrink:0}
+.task-steps{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.task-step{padding:6px 12px;border:1px solid #2f3336;border-radius:6px;cursor:pointer;font-size:11px;background:#0f1419;color:#e7e9ea;transition:all .12s;display:flex;align-items:center;gap:6px}
+.task-step:hover{border-color:#1d9bf0}
+.task-step.selected{background:#001a3d;border-color:#1d9bf0;color:#1d9bf0}
+.task-accounts{display:flex;flex-wrap:wrap;gap:4px;max-height:80px;overflow:auto;margin-bottom:10px}
+.task-acc-chip{padding:3px 8px;border-radius:4px;font-size:10px;background:#0f1419;border:1px solid #2f3336;cursor:pointer;transition:all .12s}
+.task-acc-chip:hover{border-color:#1d9bf0}
+.task-acc-chip.selected{background:#001a3d;border-color:#00ba7c;color:#00ba7c}
+.task-param-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.task-body{flex:1;display:flex;overflow:hidden}
+.task-queue{flex:1;overflow:auto;padding:8px}
+.task-history{flex:1;overflow:auto;padding:8px;border-left:1px solid #2f3336}
+
+/* ===== 日志 ===== */
+.log-container{flex:1;overflow:auto;padding:8px;font-family:'Consolas','Courier New',monospace;font-size:11px;background:#0f1419}
+.log-line{padding:3px 8px;border-bottom:1px solid #1e2732;display:flex;gap:10px}
+.log-line .log-time{color:#71767b;flex-shrink:0;width:70px}
+.log-line .log-level{flex-shrink:0;width:36px;text-align:center;font-weight:600}
+.log-line .log-module{color:#c084fc;flex-shrink:0;width:50px}
+.log-line .log-msg{flex:1;word-break:break-all}
+.log-line.debug .log-level{color:#71767b}
+.log-line.info .log-level{color:#1d9bf0}
+.log-line.warn .log-level{color:#f5a623}
+.log-line.error .log-level{color:#f4212e}
+
+/* ===== 设置 ===== */
+.settings-panel{position:fixed;top:0;right:0;width:420px;height:100vh;background:#15202b;border-left:1px solid #2f3336;z-index:50;transform:translateX(100%);transition:transform .2s;overflow:auto;padding:20px;box-shadow:-4px 0 20px rgba(0,0,0,0.5)}
+.settings-panel.open{transform:translateX(0)}
+.settings-panel h3{font-size:13px;margin:16px 0 8px;color:#1d9bf0}
+.settings-panel h3:first-child{margin-top:0}
+.settings-panel p{font-size:11px;color:#71767b;margin-bottom:8px}
+.settings-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.settings-item{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:11px;border-bottom:1px solid #1e2732;max-width:100%}
+.settings-item span{color:#e7e9ea;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+
+/* 遮罩 */
+.overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:49;display:none}
+.overlay.open{display:block}
+
+/* 账号详情弹窗 */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:100;display:none;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:#15202b;border:1px solid #2f3336;border-radius:12px;width:700px;max-height:80vh;overflow:auto;padding:24px}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.modal-header h3{font-size:15px}
+
+/* 状态栏 */
+.footer{background:#1a1a2e;border-top:1px solid #2f3336;padding:4px 16px;display:flex;align-items:center;justify-content:space-between;font-size:10px;color:#71767b;flex-shrink:0;min-height:24px}
+.footer .status-dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:4px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🦞 Aike-FBclaw</h1>
+  <div class="sys-info">
+    <span id="hStatus">加载中...</span>
+    <span id="hProxy">代理: -</span>
+    <span id="hAPI">API: -</span>
+    <button class="btn btn-outline" onclick="toggleSettings()" style="font-size:10px;padding:3px 8px">⚙️</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <button class="active" onclick="switchTab('dash')">📊 仪表盘</button>
+    <button onclick="switchTab('accounts')">👤 账号管理</button>
+    <button onclick="switchTab('tasks')">📋 任务中心</button>
+    <button onclick="switchTab('proxy')">🌐 代理管理</button>
+    <button onclick="switchTab('logs')">📜 系统日志</button>
+  </div>
+
+  <!-- ===== 仪表盘 ===== -->
+  <div class="panel active" id="tab-dash">
+    <div class="dash">
+      <div class="summary-cards">
+        <div class="summary-item"><div class="num" style="color:#1d9bf0" id="dTotal">0</div><div class="label">总账号</div></div>
+        <div class="summary-item"><div class="num" style="color:#00ba7c" id="dActive">0</div><div class="label">活跃中</div></div>
+        <div class="summary-item"><div class="num" style="color:#f5a623" id="dRunning">0</div><div class="label">执行中</div></div>
+        <div class="summary-item"><div class="num" style="color:#71767b" id="dIdle">0</div><div class="label">空闲</div></div>
+        <div class="summary-item"><div class="num" style="color:#f4212e" id="dError">0</div><div class="label">异常</div></div>
+        <div class="summary-item"><div class="num" style="color:#c084fc" id="dProxy">0</div><div class="label">代理可用</div></div>
+      </div>
+      <div class="dash-grid">
+        <div class="dash-card"><h3>📋 当前任务</h3><div id="dashTasks"></div></div>
+        <div class="dash-card"><h3>⚠️ 告警</h3><div id="dashAlerts"></div></div>
+        <div class="dash-card full" style="max-height:200px"><h3>📝 最近日志</h3><div id="dashLogs"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 账号管理 ===== -->
+  <div class="panel" id="tab-accounts" style="background:#15202b">
+    <div class="toolbar">
+      <input type="text" placeholder="搜索名称/邮箱..." id="acctSearch" oninput="renderAccountTable()" style="width:180px">
+      <select id="acctFilter" onchange="renderAccountTable()">
+        <option value="all">全部状态</option><option value="idle">空闲</option><option value="running">运行中</option><option value="error">异常</option><option value="offline">离线</option>
+      </select>
+      <button class="btn btn-blue" onclick="importAccounts()">📥 导入</button>
+      <button class="btn btn-outline" onclick="showAddAccount()">➕ 添加</button>
+      <button class="btn btn-outline" onclick="exportAccounts()">📤 导出</button>
+      <button class="btn btn-outline" onclick="refreshAll()">🔄 刷新</button>
+      <div style="flex:1"></div>
+      <span style="font-size:11px;color:#71767b">选: <b id="selCount">0</b></span>
+      <button class="btn btn-green" id="btnBatchStart" disabled onclick="batchStart()">▶ 启动选中</button>
+      <button class="btn btn-red" id="btnBatchStop" disabled onclick="batchStop()">⏹ 关闭选中</button>
+      <button class="btn btn-outline" id="btnBatchDel" disabled onclick="batchDelete()" style="color:#f4212e">🗑 删除选中</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th style="width:30px"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+          <th>名称</th><th>邮箱</th><th>状态</th><th>登录</th><th>代理IP</th><th>页面</th><th>今日操作</th><th>最后活跃</th>
+        </tr></thead>
+        <tbody id="acctBody"></tbody>
+      </table>
+    </div>
+    <div style="padding:4px 12px;background:#1a1a2e;border-top:1px solid #2f3336;font-size:10px;color:#71767b;flex-shrink:0">
+      共 <b id="acctTotal">0</b> 个账号 | 活跃 <b id="acctActive">0</b> | 离线 <b id="acctOff">0</b> | 异常 <b id="acctErr">0</b>
+    </div>
+  </div>
+
+  <!-- ===== 任务中心 ===== -->
+  <div class="panel" id="tab-tasks" style="background:#15202b">
+    <div class="task-layout">
+      <!-- 步骤1+2: 选任务类型 + 配置参数 -->
+      <div class="task-create">
+        <div style="font-size:11px;color:#71767b;margin-bottom:6px">步骤 1: 选择任务类型</div>
+        <div class="task-steps" id="taskSteps">
+          <div class="task-step selected" data-type="browse_home" onclick="selectTaskType(this)">👀 浏览首页</div>
+          <div class="task-step" data-type="like_posts" onclick="selectTaskType(this)">👍 随机点赞</div>
+          <div class="task-step" data-type="add_friends" onclick="selectTaskType(this)">👥 加好友</div>
+          <div class="task-step" data-type="share_post" onclick="selectTaskType(this)">📤 分享帖子</div>
+          <div class="task-step" data-type="join_groups" onclick="selectTaskType(this)">🏘️ 加入社团</div>
+          <div class="task-step" data-type="invite_to_group" onclick="selectTaskType(this)">📨 邀请入社</div>
+          <div class="task-step" data-type="send_message" onclick="selectTaskType(this)">💬 发私信</div>
+          <div class="task-step" data-type="check_status" onclick="selectTaskType(this)">🔍 检测状态</div>
+        </div>
+        <div class="task-param-row" id="taskParams" style="margin-bottom:10px">
+          <span style="font-size:11px;color:#71767b">参数:</span>
+          <input id="paramUrl" placeholder="目标URL（可选）" style="width:300px">
+          <input id="paramCount" type="number" min="1" max="50" value="3" style="width:60px" title="操作次数">
+          <span style="font-size:11px;color:#71767b">次</span>
+        </div>
+        <!-- 步骤3: 选账号 -->
+        <div style="font-size:11px;color:#71767b;margin-bottom:4px">步骤 3: 选择执行账号 <button class="btn btn-outline" onclick="selectAllAccts()" style="font-size:10px;padding:2px 6px">全选</button></div>
+        <div class="task-accounts" id="taskAccts"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-blue" onclick="executeTask()">▶ 立即执行</button>
+          <span style="font-size:10px;color:#71767b" id="taskSelHint">请选择至少一个账号</span>
+        </div>
+      </div>
+      <!-- 任务队列 + 历史 -->
+      <div class="task-body">
+        <div class="task-queue">
+          <div style="font-size:11px;color:#71767b;padding:6px 8px;border-bottom:1px solid #2f3336">
+            📋 任务队列 (<span id="taskQCount">0</span>)
+            <button class="btn btn-outline" onclick="clearDoneTasks()" style="font-size:9px;padding:2px 5px;margin-left:8px">清空已完成</button>
+          </div>
+          <div id="taskQueue"></div>
+        </div>
+        <div class="task-history">
+          <div style="font-size:11px;color:#71767b;padding:6px 8px;border-bottom:1px solid #2f3336">📜 执行历史</div>
+          <div id="taskHistory"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 代理管理 ===== -->
+  <div class="panel" id="tab-proxy" style="background:#15202b;overflow:auto;padding:16px">
+    <h3 style="font-size:13px;margin-bottom:12px">🌐 代理池管理</h3>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-blue" onclick="autoAssignAll()">🔗 自动分配</button>
+      <button class="btn btn-outline" onclick="refreshProxyList()">🔄 刷新</button>
+      <input type="file" id="proxyFileInput" accept=".txt" style="display:none" onchange="importProxyFile(event)">
+      <button class="btn btn-outline" onclick="document.getElementById('proxyFileInput').click()">📥 导入代理</button>
+    </div>
+    <p id="proxyStatus" style="font-size:11px;color:#71767b;margin-bottom:8px">加载中...</p>
+    <div id="proxyList"></div>
+    <div style="margin-top:16px">
+      <h3 style="font-size:12px;color:#71767b;margin-bottom:8px">账号←→代理分配</h3>
+      <div id="proxyAssign"></div>
+    </div>
+  </div>
+
+  <!-- ===== 系统日志 ===== -->
+  <div class="panel" id="tab-logs" style="background:#0f1419">
+    <div class="toolbar">
+      <select id="logLevelFilter" onchange="renderLogs()"><option value="all">全部级别</option><option value="info">INFO</option><option value="warn">WARN</option><option value="error">ERROR</option></select>
+      <input id="logSearch" placeholder="搜索日志..." oninput="renderLogs()" style="width:180px">
+      <label style="font-size:11px;color:#71767b;display:flex;align-items:center;gap:4px"><input type="checkbox" id="logAutoScroll" checked> 自动滚动</label>
+      <div style="flex:1"></div>
+      <button class="btn btn-outline" onclick="clearLogs()">🗑 清空</button>
+      <button class="btn btn-outline" onclick="exportLogs()">📤 导出</button>
+    </div>
+    <div class="log-container" id="logContainer"></div>
+  </div>
+</div>
+
+<!-- 设置面板 -->
+<div class="overlay" id="overlay" onclick="toggleSettings()"></div>
+<div class="settings-panel" id="settingsPanel">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <h3 style="font-size:15px;margin:0">⚙️ 系统设置</h3>
+    <button onclick="toggleSettings()" style="background:none;border:none;color:#71767b;cursor:pointer;font-size:18px">✕</button>
+  </div>
+
+  <h3>🤖 AI 引擎</h3>
+  <p>DeepSeek API Key（存储在环境变量 DEEPSEEK_API_KEY 中）</p>
+  <p id="gwStatus" style="font-size:11px;color:#f5a623">检测中...</p>
+  <div class="settings-row">
+    <button class="btn btn-blue" onclick="startGateway()">▶ 启动 Gateway</button>
+    <button class="btn btn-gray" onclick="stopGateway()">⏹ 关闭</button>
+    <button class="btn btn-outline" onclick="checkGateway()">🔍 检测</button>
+  </div>
+
+  <h3>📄 公共主页</h3>
+  <p>新帖自动调度分享</p>
+  <div class="settings-row">
+    <input type="text" id="cfgPage" placeholder="https://facebook.com/YourPage" style="flex:1">
+    <button class="btn btn-blue" onclick="addCfgPage()">+</button>
+  </div>
+  <div id="cfgPages"></div>
+
+  <h3>👥 社团</h3>
+  <p>AI 调度邀请好友、发帖</p>
+  <div class="settings-row">
+    <input type="text" id="cfgGroup" placeholder="https://facebook.com/groups/..." style="flex:1">
+    <button class="btn btn-blue" onclick="addCfgGroup()">+</button>
+  </div>
+  <div id="cfgGroups"></div>
+
+  <h3>⚡ 每日操作上限</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div><label style="font-size:11px;color:#71767b">加好友/天</label><select id="sFriends" style="width:100%"><option>3</option><option selected>5</option><option>8</option><option>10</option></select></div>
+    <div><label style="font-size:11px;color:#71767b">点赞/天</label><select id="sLikes" style="width:100%"><option>5</option><option selected>10</option><option>15</option><option>20</option></select></div>
+    <div><label style="font-size:11px;color:#71767b">分享/天</label><select id="sShares" style="width:100%"><option>2</option><option selected>3</option><option>5</option><option>8</option></select></div>
+    <div><label style="font-size:11px;color:#71767b">私信/天</label><select id="sMsgs" style="width:100%"><option>3</option><option selected>5</option><option>10</option></select></div>
+  </div>
+  <button class="btn btn-blue" style="margin-top:10px" onclick="saveStrategy()">💾 保存策略</button>
+
+  <h3>🔄 系统</h3>
+  <button class="btn btn-outline" onclick="restartServer()" style="color:#f5a623">🔁 重启服务</button>
+</div>
+
+<!-- 账号详情弹窗 -->
+<div class="modal-overlay" id="acctDetail" onclick="if(event.target===this)closeDetail()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>账号详情</h3>
+      <button onclick="closeDetail()" style="background:none;border:none;color:#71767b;cursor:pointer;font-size:18px">✕</button>
+    </div>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<!-- 底部状态栏 -->
+<div class="footer">
+  <div>
+    <span class="status-dot" style="background:#00ba7c" id="footerDot"></span>
+    <span id="footerStatus">系统正常</span>
+  </div>
+  <div>
+    窗口: <b id="footerWindows">0</b> | 任务: <b id="footerTasks">0</b> | 日志: <b id="footerLogs">0</b>
+  </div>
+  <div>v1.0.0 | DeepSeek + OpenClaw + 自建指纹</div>
+</div>
+
+<script>
+// ==================== 全局状态 ====================
+const API = 'http://localhost:18991/api';
+let accounts = [], taskList = [], logBuffer = [];
+let selectedIds = new Set();
+let selectedTaskType = 'browse_home';
+let taskSelAccts = new Set();
+
+// ==================== API 调用 ====================
+async function get(path) {
+  try { const r = await fetch(API + '/' + path); return r.ok ? r.json() : null; }
+  catch { return null; }
+}
+async function post(path, data) {
+  try { const r = await fetch(API + '/' + path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) }); return r.ok ? r.json() : null; }
+  catch { return null; }
+}
+
+// ==================== 导航 ====================
+function switchTab(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sidebar button').forEach(b => b.classList.remove('active'));
+  const tab = document.getElementById('tab-' + name);
+  if (tab) tab.classList.add('active');
+  event?.target?.classList?.add('active');
+  if (name === 'dash') refreshDash();
+  if (name === 'accounts') { pollFull(); renderAccountTable(); }
+  if (name === 'tasks') renderTaskPanel();
+  if (name === 'proxy') refreshProxyList();
+  if (name === 'logs') renderLogs();
+}
+
+// ==================== 轮询 ====================
+async function pollFull() {
+  const status = await get('status');
+  if (status) {
+    document.getElementById('hStatus').innerHTML = `<span class="good">🟢 ${status.activeBrowsers||0} 活跃</span>`;
+    document.getElementById('hProxy').textContent = '代理: ' + (status.activeBrowsers||0);
+    document.getElementById('hAPI').textContent = (status.gatewayRunning ? '🟢 Gateway' : '🔴 Gateway');
+    document.getElementById('footerWindows').textContent = status.activeBrowsers || 0;
+  }
+
+  const states = await get('account-states');
+  if (states) {
+    for (const s of states) {
+      let a = accounts.find(x => x.id === s.id);
+      if (!a) { a = { id: s.id, email: s.email||'', group: s.group||'' }; accounts.push(a); }
+      a.name = s.name; a.status = s.status; a.pageType = s.pageType; a.proxy = s.proxy||'-'; a.actions = s.actions||0;
+      a.loggedIn = s.loggedIn; a.lastActive = s.lastActiveTime;
+    }
+  }
+
+  const ts = await get('tasks');
+  if (ts) taskList = ts;
+
+  const logs = await get('logs?limit=100');
+  if (logs) logBuffer = logs;
+
+  const px = await get('proxy/assignments') || {};
+  for (const a of accounts) {
+    if (px[a.id]) a.proxy = '🟢 ' + px[a.id].slice(-8);
+  }
+
+  refreshDash();
+  if (document.getElementById('tab-accounts')?.classList.contains('active')) renderAccountTable();
+}
+
+setInterval(pollFull, 4000);
+pollFull();
+
+// ==================== 仪表盘 ====================
+function refreshDash() {
+  document.getElementById('dTotal').textContent = accounts.length;
+  document.getElementById('dActive').textContent = accounts.filter(a => a.status !== 'offline' && a.status !== 'error').length;
+  document.getElementById('dRunning').textContent = accounts.filter(a => a.status === 'running').length;
+  document.getElementById('dIdle').textContent = accounts.filter(a => a.status === 'idle').length;
+  document.getElementById('dError').textContent = accounts.filter(a => a.status === 'error').length;
+
+  const rt = taskList.filter(t => t.status === 'running');
+  const el = document.getElementById('dashTasks');
+  if (rt.length === 0) el.innerHTML = '<div class="empty"><div class="icon">📋</div>暂无执行中任务</div>';
+  else el.innerHTML = rt.map(t => `<div style="padding:4px 0;border-bottom:1px solid #1e2732;font-size:11px"><span style="color:#f5a623">●</span> ${t.accountId?.slice(-8)} — ${taskLabel(t.type)}</div>`).join('');
+
+  const alerts = accounts.filter(a => a.status === 'error');
+  const ae = document.getElementById('dashAlerts');
+  if (alerts.length === 0) ae.innerHTML = '<div class="empty"><div class="icon">✅</div>无异常</div>';
+  else ae.innerHTML = alerts.map(a => `<div style="padding:3px 0;border-bottom:1px solid #1e2732;font-size:11px;color:#f4212e">⚠️ ${a.name} — ${a.status}</div>`).join('');
+
+  const le = document.getElementById('dashLogs');
+  if (le) le.innerHTML = logBuffer.slice(-20).map(l => `<div class="log-line ${l.level||'info'}"><span class="log-time">${fmtTime(l.time)}</span><span class="log-level">${(l.level||'INFO').toUpperCase()}</span><span class="log-msg">${l.message||l.msg||''}</span></div>`).join('');
+}
+
+function taskLabel(type) {
+  const m = { browse_home:'浏览首页', like_posts:'点赞', add_friends:'加好友', share_post:'分享', invite_to_group:'邀请入社', join_groups:'加入社团', send_message:'发私信', check_status:'检测', chain:'任务链', post_content:'发帖' };
+  return m[type] || type;
+}
+
+function fmtTime(t) {
+  if (!t) return '';
+  const d = new Date(typeof t === 'number' ? t : t);
+  return d.toLocaleTimeString('zh-TW', { hour12: false });
+}
+
+// ==================== 账号管理 ====================
+function renderAccountTable() {
+  const search = (document.getElementById('acctSearch')?.value || '').toLowerCase();
+  const filter = document.getElementById('acctFilter')?.value || 'all';
+  let list = accounts;
+  if (filter !== 'all') list = list.filter(a => a.status === filter);
+  if (search) list = list.filter(a => (a.name || '').toLowerCase().includes(search) || (a.email || '').toLowerCase().includes(search));
+
+  const tbody = document.getElementById('acctBody');
+  const badges = { idle:'bg-green', running:'bg-blue', error:'bg-red', offline:'bg-gray', manual_control:'bg-purple', starting:'bg-yellow', dead:'bg-red' };
+  const labels = { idle:'空闲', running:'运行中', error:'异常', offline:'离线', manual_control:'接管', starting:'启动中', dead:'不可用' };
+
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty"><div class="icon">📭</div>暂无账号，请导入或添加</div></td></tr>';
+  } else {
+    tbody.innerHTML = list.map(a => {
+      const chk = selectedIds.has(a.id);
+      const b = badges[a.status] || 'bg-gray';
+      const l = labels[a.status] || a.status;
+      return `<tr class="${chk ? 'selected' : ''}" onclick="showDetail('${a.id}')" style="cursor:pointer">
+        <td onclick="event.stopPropagation()"><input type="checkbox" ${chk ? 'checked' : ''} onchange="toggleSel('${a.id}')"></td>
+        <td><b>${a.name || '-'}</b>${a.group ? `<span class="badge bg-purple" style="margin-left:4px">${a.group}</span>` : ''}</td>
+        <td style="color:#71767b;font-size:10px">${a.email || '-'}</td>
+        <td><span class="badge ${b}">${l}</span></td>
+        <td>${a.loggedIn ? '<span style="color:#00ba7c">✓</span>' : a.status === 'offline' ? '<span style="color:#71767b">-</span>' : '<span style="color:#f5a623">?</span>'}</td>
+        <td style="color:#71767b;font-size:10px">${a.proxy || '-'}</td>
+        <td style="color:#71767b;font-size:10px">${a.pageType || '-'}</td>
+        <td style="color:#71767b;font-size:10px">${a.actions || 0}</td>
+        <td style="color:#71767b;font-size:10px">${a.lastActive ? fmtTime(a.lastActive) : '-'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // 更新统计
+  document.getElementById('selCount').textContent = selectedIds.size;
+  document.getElementById('acctTotal').textContent = accounts.length;
+  document.getElementById('acctActive').textContent = accounts.filter(a => a.status !== 'offline' && a.status !== 'error').length;
+  document.getElementById('acctOff').textContent = accounts.filter(a => a.status === 'offline').length;
+  document.getElementById('acctErr').textContent = accounts.filter(a => a.status === 'error').length;
+
+  const has = selectedIds.size > 0;
+  ['btnBatchStart', 'btnBatchStop', 'btnBatchDel'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = !has; });
+}
+
+function toggleSel(id) { selectedIds.has(id) ? selectedIds.delete(id) : selectedIds.add(id); renderAccountTable(); }
+function toggleSelectAll() {
+  const all = document.getElementById('selectAll').checked;
+  const search = (document.getElementById('acctSearch')?.value || '').toLowerCase();
+  const filter = document.getElementById('acctFilter')?.value || 'all';
+  let list = accounts;
+  if (filter !== 'all') list = list.filter(a => a.status === filter);
+  if (search) list = list.filter(a => (a.name || '').toLowerCase().includes(search));
+  list.forEach(a => all ? selectedIds.add(a.id) : selectedIds.delete(a.id));
+  renderAccountTable();
+}
+
+function batchStart() { selectedIds.forEach(id => startBrowser(id)); }
+function batchStop() { selectedIds.forEach(id => stopBrowser(id)); }
+function batchDelete() {
+  if (!confirm(`确认删除 ${selectedIds.size} 个账号及其数据？不可恢复。`)) return;
+  selectedIds.forEach(async id => { await post('account/delete', { accountId: id }); });
+  accounts = accounts.filter(a => !selectedIds.has(a.id));
+  selectedIds.clear();
+  renderAccountTable();
+}
+
+async function startBrowser(id) {
+  const r = await post('browser/start', { accountId: id });
+  if (r?.ok) { const a = accounts.find(x => x.id === id); if (a) a.status = 'idle'; addClientLog('success', `启动: ${id.slice(-8)}`); }
+  else addClientLog('error', `启动失败: ${id.slice(-8)}`);
+  renderAccountTable();
+}
+async function stopBrowser(id) {
+  await post('browser/stop', { accountId: id });
+  const a = accounts.find(x => x.id === id); if (a) a.status = 'offline';
+  addClientLog('info', `关闭: ${id.slice(-8)}`);
+  renderAccountTable();
+}
+
+// 导入
+function importAccounts() {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,.csv';
+  inp.onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    const text = await f.text();
+    let data;
+    if (f.name.endsWith('.json')) data = JSON.parse(text);
+    else { const lines = text.split('\n'); const h = lines[0].split(','); data = lines.slice(1).filter(l=>l.trim()).map(l => { const v = l.split(','); const o = {}; h.forEach((hh,i) => o[hh.trim()] = (v[i]||'').trim()); return o; }); }
+    const accts = (Array.isArray(data) ? data : data.accounts || []).map(a => ({
+      accountId: 'acc_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+      name: a['名称'] || a['Name'] || a.name || a.email || 'Unknown',
+      email: a.email || a['邮箱'] || a['Email'] || '',
+    }));
+    const r = await post('profiles/import', { accounts: accts });
+    if (r) {
+      r.filter(x => x.ok).forEach(x => accounts.push({ id: x.id, name: x.name, email: '', status: 'offline', pageType: '-', proxy: '-', actions: 0 }));
+      addClientLog('success', `导入 ${r.filter(x=>x.ok).length} 个账号`);
+      renderAccountTable();
+    }
+  };
+  inp.click();
+}
+
+// 添加
+function showAddAccount() {
+  const d = document.getElementById('acctDetail');
+  document.getElementById('detailContent').innerHTML = `
+    <div style="display:grid;gap:12px">
+      <div><label style="font-size:11px;color:#71767b">邮箱/名称</label><input id="addName" style="width:100%;margin-top:4px" placeholder="example@mail.com"></div>
+      <div><label style="font-size:11px;color:#71767b">密码</label><input id="addPass" type="password" style="width:100%;margin-top:4px"></div>
+      <div><label style="font-size:11px;color:#71767b">2FA密钥（可选）</label><input id="add2FA" style="width:100%;margin-top:4px"></div>
+      <div><label style="font-size:11px;color:#71767b">代理（可选）</label><input id="addProxy" style="width:100%;margin-top:4px" placeholder="socks5://host:port"></div>
+      <button class="btn btn-blue" onclick="submitAdd()">✅ 添加账号</button>
+    </div>`;
+  d.classList.add('open');
+}
+async function submitAdd() {
+  const name = document.getElementById('addName')?.value?.trim();
+  if (!name) return;
+  const pass = document.getElementById('addPass')?.value?.trim();
+  const tfa = document.getElementById('add2FA')?.value?.trim();
+  const proxy = document.getElementById('addProxy')?.value?.trim();
+  await post('profiles/import', { accounts: [{ name, email: name, proxy: proxy || '', password: pass || '', twofa: tfa || undefined }] });
+  closeDetail();
+  addClientLog('info', '添加账号: ' + name);
+  pollFull();
+}
+
+// 导出
+function exportAccounts() {
+  const csv = '名称,邮箱,状态,代理,今日操作\n' + accounts.map(a => `${a.name||''},${a.email||''},${a.status||''},${a.proxy||''},${a.actions||0}`).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'fbclaw-accounts.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// 详情
+async function showDetail(id) {
+  const d = document.getElementById('acctDetail');
+  const a = accounts.find(x => x.id === id);
+  if (!a) return;
+
+  let tfaHtml = '';
+  try {
+    const tfa = await get('2fa/code?accountId=' + id);
+    if (tfa?.code) tfaHtml = `<div style="margin-top:8px;padding:8px;background:#001a3d;border-radius:6px;text-align:center">
+      <div style="font-size:10px;color:#71767b">🔑 2FA</div>
+      <div style="font-size:22px;font-weight:700;color:#1d9bf0;letter-spacing:4px;font-family:monospace">${tfa.code}</div>
+      <div style="font-size:10px;color:#71767b">${tfa.remaining}秒</div>
+    </div>`;
+  } catch {}
+
+  document.getElementById('detailContent').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:12px">
+      <div>
+        <h4 style="color:#1d9bf0;margin-bottom:8px;font-size:12px">📋 基本信息</h4>
+        <div style="margin-bottom:6px"><b>ID:</b> <span style="color:#71767b;font-size:10px">${id}</span></div>
+        <div style="margin-bottom:6px"><b>名称:</b> <input id="editName" value="${a.name||''}" style="width:100%"></div>
+        <div style="margin-bottom:6px"><b>邮箱:</b> <input id="editEmail" value="${a.email||''}" style="width:100%"></div>
+        <div style="margin-bottom:6px"><b>状态:</b> <span class="badge ${a.status==='idle'?'bg-green':a.status==='offline'?'bg-gray':'bg-blue'}">${a.status}</span></div>
+        ${tfaHtml}
+        <div style="margin-top:8px;display:flex;gap:6px">
+          ${a.status==='offline' ? `<button class="btn btn-green" onclick="startBrowser('${id}')">▶ 启动</button>` :
+            a.status==='idle'||a.status==='running' ? `<button class="btn btn-red" onclick="stopBrowser('${id}')">⏹ 关闭</button>` : ''}
+          <button class="btn btn-outline" onclick="saveDetail('${id}')">💾 保存</button>
+        </div>
+      </div>
+      <div>
+        <h4 style="color:#1d9bf0;margin-bottom:8px;font-size:12px">🌐 代理 & Cookie</h4>
+        <div style="font-size:11px;color:#71767b;margin-bottom:4px">代理: ${a.proxy||'未分配'}</div>
+        <div style="font-size:11px;color:#71767b;margin-bottom:4px">登录: ${a.loggedIn?'✅ 已登录':'❓ 未知'}</div>
+        <div style="font-size:11px;color:#71767b;margin-bottom:4px">今日操作: ${a.actions||0}次</div>
+        <div style="font-size:11px;color:#71767b">最后活跃: ${a.lastActive?fmtTime(a.lastActive):'-'}</div>
+      </div>
+    </div>`;
+  d.classList.add('open');
+}
+async function saveDetail(id) {
+  const name = document.getElementById('editName')?.value?.trim();
+  const email = document.getElementById('editEmail')?.value?.trim();
+  const a = accounts.find(x => x.id === id);
+  if (a) { if (name) a.name = name; if (email) a.email = email; }
+  closeDetail();
+  renderAccountTable();
+}
+function closeDetail() { document.getElementById('acctDetail').classList.remove('open'); }
+
+// ==================== 任务面板 ====================
+let selectedTaskType = 'browse_home';
+let taskSelAccts = new Set();
+
+function selectTaskType(el) {
+  document.querySelectorAll('.task-step').forEach(s => s.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedTaskType = el.dataset.type;
+}
+
+function selectAllAccts() {
+  if (taskSelAccts.size === accounts.length) { taskSelAccts.clear(); }
+  else { accounts.forEach(a => taskSelAccts.add(a.id)); }
+  renderTaskPanel();
+}
+
+function renderTaskPanel() {
+  // 账号选择 chips
+  const container = document.getElementById('taskAccts');
+  if (!container) return;
+  container.innerHTML = accounts.map(a => {
+    const sel = taskSelAccts.has(a.id);
+    return `<div class="task-acc-chip ${sel ? 'selected' : ''}" onclick="toggleTaskAcct('${a.id}')">
+      ${a.name?.slice(0,12) || '?'} <span style="color:${a.status==='offline'?'#f4212e':'#71767b'};font-size:9px">${a.status}</span>
+    </div>`;
+  }).join('') || '<span style="color:#71767b;font-size:10px">暂无账号</span>';
+
+  document.getElementById('taskSelHint').textContent = taskSelAccts.size > 0 ? `已选 ${taskSelAccts.size} 个账号` : '请选择至少一个账号';
+}
+
+function toggleTaskAcct(id) { taskSelAccts.has(id) ? taskSelAccts.delete(id) : taskSelAccts.add(id); renderTaskPanel(); }
+
+async function executeTask() {
+  if (taskSelAccts.size === 0) return;
+  const ids = Array.from(taskSelAccts);
+  const type = document.querySelector('.task-step.selected')?.dataset?.type || 'browse_home';
+  const url = document.getElementById('paramUrl')?.value?.trim() || '';
+  const count = parseInt(document.getElementById('paramCount')?.value || '3');
+
+  const r = await post('task/add', { accountIds: ids, type, params: { url, count } });
+  if (r?.ok) {
+    addClientLog('success', `任务: ${taskLabel(type)} → ${ids.length}个账号`);
+    ids.forEach(id => { const a = accounts.find(x => x.id === id); if (a) a.status = 'running'; });
+    taskSelAccts.clear();
+    renderTaskPanel();
+    refreshDash();
+  }
+}
+
+function clearDoneTasks() {
+  taskList = taskList.filter(t => t.status === 'running' || t.status === 'pending');
+  pollFull();
+}
+
+// ==================== 代理 ====================
+async function refreshProxyList() {
+  const list = await get('proxy/list') || [];
+  const el = document.getElementById('proxyList');
+  document.getElementById('proxyStatus').textContent = list.length ? `✅ ${list.length} 个代理` : '⚠️ 代理池为空';
+  if (!el) return;
+  el.innerHTML = list.map(p => `
+    <div style="padding:6px 10px;margin:2px 0;border:1px solid #1e2732;border-radius:4px;display:flex;align-items:center;gap:8px;font-size:11px">
+      <span style="width:8px;height:8px;border-radius:50%;background:${p.status==='active'?'#00ba7c':'#71767b'}"></span>
+      <span style="color:#e7e9ea;flex:1">${p.host}:${p.port}</span>
+      <span style="color:#71767b;font-size:10px">→127.0.0.1:${p.localPort}</span>
+      ${p.assignedAccount && p.assignedAccount !== '-' ? `<span class="badge bg-blue">${p.assignedAccount.slice(0,10)}</span>` : ''}
+      <button class="btn btn-outline" style="font-size:10px;padding:2px 6px" onclick="assignProxy('${p.id}')">分配</button>
+    </div>
+  `).join('') || '<p style="color:#71767b;font-size:11px">无代理</p>';
+
+  const assign = await get('proxy/assignments') || {};
+  const ae = document.getElementById('proxyAssign');
+  const entries = Object.entries(assign);
+  ae.innerHTML = entries.length === 0 ? '<p style="color:#71767b;font-size:11px">未分配</p>'
+    : entries.map(([acc, px]) => `<div style="padding:3px 0;font-size:11px;border-bottom:1px solid #1e2732">${acc.slice(-8)} → proxy:${px.slice(-8)}</div>`).join('');
+}
+
+async function autoAssignAll() {
+  const r = await post('proxy/auto-assign', {});
+  addClientLog('info', r?.assigned ? `自动分配 ${r.assigned} 个代理` : '自动分配完成');
+  refreshProxyList();
+}
+
+async function assignProxy(proxyId) {
+  const name = prompt('分配给账号ID（前8位）:');
+  if (!name) return;
+  const a = accounts.find(x => x.id.endsWith(name) || x.name?.includes(name));
+  if (!a) { alert('未找到账号'); return; }
+  await post('proxy/assign', { proxyId, accountId: a.id });
+  refreshProxyList();
+  addClientLog('info', `代理分配给 ${a.name || a.id.slice(-8)}`);
+}
+
+async function importProxyFile(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const r = await post('proxy/import', { filePath: f.path || f.name });
+  addClientLog('success', r?.imported ? `导入 ${r.imported} 个代理` : '导入完成');
+  refreshProxyList();
+}
+
+// ==================== 日志 ====================
+function renderLogs() {
+  const el = document.getElementById('logContainer'); if (!el) return;
+  const minLevel = document.getElementById('logLevelFilter')?.value || 'all';
+  const search = (document.getElementById('logSearch')?.value || '').toLowerCase();
+
+  let logs = logBuffer;
+  if (minLevel !== 'all') {
+    const levels = { debug:0, info:1, warn:2, error:3 };
+    const min = levels[minLevel];
+    logs = logs.filter(l => (levels[l.level] || 1) >= min);
+  }
+  if (search) logs = logs.filter(l => (l.message || l.msg || '').toLowerCase().includes(search) || (l.module || '').toLowerCase().includes(search));
+
+  el.innerHTML = logs.map(l => {
+    const lvl = l.level || 'info';
+    return `<div class="log-line ${lvl}"><span class="log-time">${fmtTime(l.time)}</span><span class="log-level">${lvl.toUpperCase()}</span><span class="log-module">[${l.module||'SYS'}]</span><span class="log-msg">${escHtml(l.message||l.msg||'')}</span></div>`;
+  }).join('') || '<div class="empty"><div class="icon">📜</div>暂无日志</div>';
+
+  if (document.getElementById('logAutoScroll')?.checked) el.scrollTop = el.scrollHeight;
+}
+
+function clearLogs() { logBuffer = []; renderLogs(); }
+function exportLogs() {
+  const text = logBuffer.map(l => `[${fmtTime(l.time)}] [${l.level||'INFO'}] [${l.module||'SYS'}] ${l.message||l.msg||''}`).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'fbclaw-logs.txt'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function addClientLog(level, msg) {
+  logBuffer.push({ time: Date.now(), level, module: 'UI', message: msg });
+  if (logBuffer.length > 500) logBuffer.shift();
+  renderLogs(); refreshDash();
+}
+
+// ==================== 设置 ====================
+function toggleSettings() {
+  document.getElementById('settingsPanel').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('open');
+}
+
+let settings = JSON.parse(localStorage.getItem('fbclaw_settings') || '{"pages":[],"groups":[]}');
+function renderSettings() {
+  document.getElementById('cfgPages').innerHTML = settings.pages.map((u,i) => `<div class="settings-item"><span>${u}</span><button onclick="settings.pages.splice(${i},1);saveSettings();renderSettings()" style="color:#f4212e;background:none;border:none;cursor:pointer">✕</button></div>`).join('') || '<p style="color:#71767b;font-size:11px">无</p>';
+  document.getElementById('cfgGroups').innerHTML = settings.groups.map((u,i) => `<div class="settings-item"><span>${u}</span><button onclick="settings.groups.splice(${i},1);saveSettings();renderSettings()" style="color:#f4212e;background:none;border:none;cursor:pointer">✕</button></div>`).join('') || '<p style="color:#71767b;font-size:11px">无</p>';
+}
+function saveSettings() { localStorage.setItem('fbclaw_settings', JSON.stringify(settings)); }
+function addCfgPage() { const v = document.getElementById('cfgPage').value.trim(); if (v) { settings.pages.push(v); document.getElementById('cfgPage').value = ''; saveSettings(); renderSettings(); } }
+function addCfgGroup() { const v = document.getElementById('cfgGroup').value.trim(); if (v) { settings.groups.push(v); document.getElementById('cfgGroup').value = ''; saveSettings(); renderSettings(); } }
+function saveStrategy() { addClientLog('success', '策略已保存'); }
+
+async function startGateway() { await post('gateway/start'); checkGateway(); }
+async function stopGateway() { await post('gateway/stop'); checkGateway(); }
+async function checkGateway() {
+  const s = await get('gateway/status');
+  document.getElementById('gwStatus').textContent = s?.running ? '✅ Gateway 运行中 (端口 18789)' : '❌ Gateway 未运行';
+}
+async function restartServer() { await post('system/restart'); addClientLog('warn', '正在重启...'); }
+
+function refreshAll() { pollFull(); renderAccountTable(); }
+
+renderSettings(); checkGateway(); refreshDash();
+addClientLog('info', 'Aike-FBclaw 系统就绪');
+</script>
+</body>
+</html>

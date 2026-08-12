@@ -1,0 +1,72 @@
+{
+  "name": "aike-fbclaw",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aike-FBclaw — Facebook 多账号 AI 智能运营桌面智能体",
+  "author": "Aike",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "npx tsx src/server.ts",
+    "start": "npx tsx src/server.ts",
+    "dist:ui": "vite build",
+    "build:electron": "node scripts/build-electron.mjs",
+    "electron:dev": "electron .",
+    "pack:dir": "electron-builder --win --dir",
+    "pack:nsis": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.aike.fbclaw",
+    "productName": "Aike-FBclaw",
+    "copyright": "Copyright © 2026 Aike",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "electron/**/*.cjs",
+      "dist/**/*",
+      "ui/**/*",
+      "node-runtime/**/*",
+      "assets/**/*",
+      "PROJECT_BRIEF.md",
+      "SYSTEM_LOGIC_MAP.md",
+      "EVOLUTION_DIRECTION.md",
+      ".env",
+      "package.json"
+    ],
+    "asar": false,
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        "nsis",
+        "dir"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Aike-FBclaw"
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "openclaw": "latest",
+    "playwright-core": "^1.49.0",
+    "uuid": "^10.0.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.0.0",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.24.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

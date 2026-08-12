@@ -1,0 +1,2038 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw · Command Deck</title>
+<style>
+/* ================================================================
+   Lumina Command Deck — Light Tech Design System
+   指挥中心布局：状态光带 / 生命体征波形 / 数据流 / 时间轴
+   ================================================================ */
+:root {
+  /* 底色 */
+  --bg-page:      #eef1f7;
+  --bg-card:      #ffffff;
+  --bg-sidebar:   rgba(255,255,255,0.9);
+  --bg-input:     #f4f6fb;
+  --bg-hover:     rgba(37,99,255,0.05);
+  --bg-tint:      linear-gradient(135deg, rgba(37,99,255,0.05), rgba(124,58,237,0.05));
+
+  /* 主色 */
+  --primary:      #2563ff;
+  --primary-deep: #1d4ed8;
+  --violet:       #7c3aed;
+  --teal:         #0d9488;
+  --cyan:         #0891b2;
+  --grad-main:    linear-gradient(135deg, #2563ff, #7c3aed);
+  --grad-soft:    linear-gradient(135deg, rgba(37,99,255,0.12), rgba(124,58,237,0.1));
+
+  /* 状态 */
+  --success:      #10b981;
+  --warning:      #f59e0b;
+  --danger:       #ef4444;
+
+  /* 文字 */
+  --text-1:       #17203a;
+  --text-2:       #56617c;
+  --text-3:       #8b95ad;
+  --text-mono:    #0369a1;
+
+  /* 边框阴影 */
+  --border:       rgba(23,32,58,0.08);
+  --shadow-card:  0 1px 2px rgba(23,32,58,0.04), 0 8px 24px rgba(23,32,58,0.06);
+  --shadow-hover: 0 4px 8px rgba(23,32,58,0.05), 0 16px 40px rgba(37,99,255,0.10);
+  --shadow-glow:  0 6px 24px rgba(37,99,255,0.18);
+  --glow-violet:  0 6px 24px rgba(124,58,237,0.18);
+
+  /* 字体 */
+  --font-sans: -apple-system,'Segoe UI','Microsoft JhengHei','PingFang TC',sans-serif;
+  --font-mono: 'JetBrains Mono','Fira Code','Consolas','Courier New',monospace;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-page);
+  color: var(--text-1);
+  overflow: hidden;
+  height: 100vh;
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============ 背景层 ============ */
+.bg-layer { position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden;
+  background:
+    radial-gradient(ellipse 50% 40% at 12% -5%, rgba(37,99,255,0.07), transparent 70%),
+    radial-gradient(ellipse 45% 40% at 88% 8%, rgba(124,58,237,0.06), transparent 70%),
+    radial-gradient(ellipse 45% 35% at 50% 108%, rgba(13,148,136,0.05), transparent 70%);
+}
+.bg-mesh { position:absolute; inset:-20%;
+  background:
+    radial-gradient(ellipse 38% 32% at 72% 28%, rgba(37,99,255,0.05), transparent 70%),
+    radial-gradient(ellipse 33% 28% at 22% 68%, rgba(124,58,237,0.045), transparent 70%);
+  animation: mesh-drift 26s ease-in-out infinite alternate;
+}
+@keyframes mesh-drift { 0%{transform:translate(0,0) scale(1);} 100%{transform:translate(-0.8%,0.8%) scale(1.02);} }
+.bg-grid { position:absolute; inset:0;
+  background-image:
+    linear-gradient(rgba(37,99,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37,99,255,0.03) 1px, transparent 1px);
+  background-size:44px 44px;
+  mask-image:radial-gradient(ellipse 85% 75% at 50% 30%, black, transparent);
+  -webkit-mask-image:radial-gradient(ellipse 85% 75% at 50% 30%, black, transparent);
+}
+
+/* ============ 布局 ============ */
+.app { position:relative; z-index:1; display:flex; height:100vh; }
+
+/* ============ 侧栏 ============ */
+.sidebar {
+  width:176px; flex-shrink:0;
+  background: var(--bg-sidebar);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-right:1px solid var(--border);
+  display:flex; flex-direction:column; z-index:10;
+}
+.sidebar-brand { padding:18px 14px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+.brand-icon { width:36px; height:36px; flex-shrink:0; filter: drop-shadow(0 2px 8px rgba(37,99,255,0.3)); }
+.brand-icon svg { width:100%; height:100%; }
+.brand-text { font-size:16px; font-weight:800; letter-spacing:.4px; line-height:1.2;
+  background:var(--grad-main); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+.brand-text .sub { font-size:9px; font-weight:600; letter-spacing:2px; color:var(--text-3);
+  -webkit-text-fill-color:var(--text-3); text-transform:uppercase; }
+
+.nav-list { flex:1; overflow-y:auto; padding:12px 10px; }
+.nav-list::-webkit-scrollbar { width:3px; }
+.nav-list::-webkit-scrollbar-thumb { background:rgba(37,99,255,.2); border-radius:2px; }
+.nav-item {
+  display:flex; align-items:center; gap:9px;
+  padding:0 12px; height:40px; margin-bottom:3px;
+  cursor:pointer; font-size:12.5px; font-weight:600;
+  color:var(--text-2);
+  border-radius:12px; position:relative;
+  transition:all .16s ease; white-space:nowrap;
+}
+.nav-item .nav-icon { font-size:15px; width:20px; text-align:center; opacity:.75; transition:all .16s; }
+.nav-item:hover { background:var(--bg-hover); color:var(--text-1); }
+.nav-item.active {
+  background: var(--grad-main);
+  color:#fff;
+  box-shadow: 0 4px 16px rgba(37,99,255,.35);
+}
+.nav-item.active .nav-icon { opacity:1; filter:drop-shadow(0 0 4px rgba(255,255,255,.5)); }
+.nav-item.active .nav-num { color:rgba(255,255,255,.6); }
+.nav-item .nav-num { font-family:var(--font-mono); font-size:9px; color:var(--text-3); margin-left:auto; }
+
+.sidebar-footer { padding:12px 16px; border-top:1px solid var(--border); font-size:10px; color:var(--text-3);
+  font-family:var(--font-mono); display:flex; align-items:center; gap:7px; }
+.status-dot { width:7px; height:7px; border-radius:50%; background:var(--success);
+  box-shadow:0 0 8px rgba(16,185,129,.6); animation:pulse-dot 2s ease-in-out infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1;} 50%{opacity:.5;} }
+
+/* ============ 主区 ============ */
+.main { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
+
+/* —— 状态光带 —— */
+.status-ribbon {
+  height:3px; flex-shrink:0; position:relative; overflow:hidden;
+  background:linear-gradient(90deg, transparent, rgba(37,99,255,.15), rgba(124,58,237,.15), transparent);
+}
+.status-ribbon::after {
+  content:''; position:absolute; top:0; left:-40%; width:40%; height:100%;
+  background:linear-gradient(90deg, transparent, #2563ff, #7c3aed, transparent);
+  animation:ribbon-flow 3.5s linear infinite;
+}
+@keyframes ribbon-flow { 0%{left:-40%;} 100%{left:120%;} }
+
+/* —— 顶栏（系统状态条） —— */
+.topbar {
+  height:56px; flex-shrink:0;
+  background:rgba(255,255,255,.88);
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:14px; padding:0 20px; z-index:9;
+}
+.topbar-title { display:flex; flex-direction:column; margin-right:auto; line-height:1.2; }
+.topbar-title .tt-main { font-size:17px; font-weight:800; color:var(--text-1); letter-spacing:.2px; }
+.topbar-title .tt-crumb { font-family:var(--font-mono); font-size:10px; color:var(--text-3); }
+.sys-strip { display:flex; align-items:center; gap:10px; }
+.sys-strip .sys-pill {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 11px; border-radius:20px;
+  font-size:10.5px; font-weight:700; font-family:var(--font-mono);
+  background:var(--bg-input); border:1px solid var(--border); color:var(--text-2);
+}
+.sys-pill .pdot { width:6px; height:6px; border-radius:50%; }
+.pdot.ok { background:var(--success); box-shadow:0 0 5px rgba(16,185,129,.6); }
+.pdot.warn { background:var(--warning); box-shadow:0 0 5px rgba(245,158,11,.6); }
+.pdot.ai { background:var(--violet); box-shadow:0 0 5px rgba(124,58,237,.6); }
+.topbar-actions { display:flex; align-items:center; gap:5px; }
+
+/* —— 按钮 —— */
+.btn {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:7px 14px; border:1px solid rgba(37,99,255,.22);
+  border-radius:10px; background:#fff; color:var(--primary);
+  font-size:11.5px; font-weight:700; cursor:pointer;
+  transition:all .15s ease; white-space:nowrap; font-family:var(--font-sans);
+  box-shadow:0 1px 2px rgba(23,32,58,.04); position:relative; overflow:hidden;
+}
+.btn::before { content:''; position:absolute; top:0; left:-100%; width:100%; height:100%;
+  background:linear-gradient(90deg, transparent, rgba(37,99,255,.09), transparent); transition:left .45s ease; }
+.btn:hover::before { left:100%; }
+.btn:hover { border-color:var(--primary); box-shadow:var(--shadow-glow); transform:translateY(-1px); }
+.btn:active { transform:translateY(0); }
+.btn-sm { padding:5px 11px; font-size:10.5px; border-radius:8px; }
+.btn-violet { border-color:rgba(124,58,237,.22); color:var(--violet); }
+.btn-violet::before { background:linear-gradient(90deg, transparent, rgba(124,58,237,.09), transparent); }
+.btn-violet:hover { border-color:var(--violet); box-shadow:var(--glow-violet); }
+.btn-success { border-color:rgba(16,185,129,.25); color:#059669; }
+.btn-success:hover { border-color:var(--success); box-shadow:0 6px 20px rgba(16,185,129,.18); }
+.btn-danger { border-color:rgba(239,68,68,.25); color:var(--danger); }
+.btn-danger:hover { border-color:var(--danger); box-shadow:0 6px 20px rgba(239,68,68,.18); }
+.btn-warning { border-color:rgba(245,158,11,.3); color:#d97706; }
+.btn-warning:hover { border-color:var(--warning); box-shadow:0 6px 20px rgba(245,158,11,.18); }
+.btn-dark { border-color:var(--border); color:var(--text-2); background:#fafbfe; }
+.btn-dark:hover { color:var(--text-1); border-color:rgba(23,32,58,.16); box-shadow:0 4px 14px rgba(23,32,58,.07); transform:translateY(-1px); }
+.btn-dark::before { display:none; }
+.btn-primary { background:var(--grad-main); color:#fff; border:none; box-shadow:0 4px 16px rgba(37,99,255,.28); }
+.btn-primary:hover { box-shadow:0 6px 24px rgba(37,99,255,.4); }
+.btn .icon { font-size:13px; }
+
+/* —— 内容区 —— */
+.content { flex:1; overflow-y:auto; padding:22px; position:relative; }
+.content::-webkit-scrollbar { width:6px; }
+.content::-webkit-scrollbar-thumb { background:rgba(37,99,255,.18); border-radius:3px; }
+.page { display:none; }
+.page.active { display:block; animation:page-in .35s ease; }
+@keyframes page-in { from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
+
+/* —— 卡片 —— */
+.glass-card {
+  background:var(--bg-card); border:1px solid var(--border);
+  border-radius:16px; padding:20px;
+  box-shadow:var(--shadow-card); position:relative;
+  transition:border-color .2s, box-shadow .2s, transform .2s;
+}
+.glass-card:hover { border-color:rgba(37,99,255,.16); box-shadow:var(--shadow-hover); }
+.card-title {
+  font-size:14.5px; font-weight:800; color:var(--text-1);
+  display:flex; align-items:center; gap:9px;
+  margin-bottom:16px; padding-left:12px; border-left:3px solid transparent;
+  border-image:var(--grad-main) 1; border-left:3px solid;
+}
+.card-title .title-icon { font-size:16px; }
+.card-title .title-badge { margin-left:auto; font-family:var(--font-mono); font-size:9.5px;
+  color:var(--text-3); background:var(--bg-input); padding:3px 10px; border-radius:20px; font-weight:600; }
+
+/* ============ 监控页 · 指挥中心 ============ */
+/* 顶部状态行 */
+.deck-head { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+.deck-head .deck-title { font-size:22px; font-weight:800; letter-spacing:.3px;
+  background:var(--grad-main); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+.deck-head .deck-sub { font-size:11px; color:var(--text-3); font-family:var(--font-mono); margin-left:auto; }
+.live-pill { display:inline-flex; align-items:center; gap:6px; padding:5px 14px; border-radius:20px;
+  background:rgba(16,185,129,.08); border:1px solid rgba(16,185,129,.25); color:#059669;
+  font-size:11px; font-weight:700; font-family:var(--font-mono); }
+.live-pill .ld { width:7px; height:7px; border-radius:50%; background:var(--success); box-shadow:0 0 6px rgba(16,185,129,.6); animation:pulse-dot 1.5s infinite; }
+
+/* 生命体征卡 */
+.vitals-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:16px; }
+.vital-card {
+  background:var(--bg-card); border:1px solid var(--border); border-radius:16px;
+  padding:18px 20px; position:relative; overflow:hidden;
+  box-shadow:var(--shadow-card); transition:all .2s;
+}
+.vital-card:hover { transform:translateY(-3px); box-shadow:var(--shadow-hover); }
+.vital-card .vc-top { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.vital-card .vc-label { font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.6px; }
+.vital-card .vc-icon { font-size:14px; }
+.vital-card .vc-value { font-family:var(--font-mono); font-size:38px; font-weight:800; letter-spacing:-1px; line-height:1.1; }
+.vital-card .vc-value .unit { font-size:14px; font-weight:600; color:var(--text-3); margin-left:2px; }
+.vital-card .vc-trend { display:flex; align-items:center; gap:5px; margin-top:6px; font-family:var(--font-mono); font-size:10.5px; font-weight:700; }
+.vital-card .vc-trend.up { color:var(--success); }
+.vital-card .vc-trend.down { color:var(--danger); }
+.vital-card .vc-trend.neutral { color:var(--text-3); }
+.vital-card .vc-spark { position:absolute; right:0; bottom:0; width:100%; height:44px; opacity:.9; }
+.vital-card.vio .vc-value { color:var(--violet); }
+.vital-card.teal .vc-value { color:var(--teal); }
+
+/* 中部：波形 + 系统资源 */
+.deck-mid { display:grid; grid-template-columns:1.6fr 1fr; gap:16px; margin-bottom:16px; }
+.chart-wrap { position:relative; }
+.chart-wrap svg { width:100%; display:block; }
+.chart-title { font-size:13px; font-weight:700; color:var(--text-2); margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+.chart-title .ct-num { font-family:var(--font-mono); font-size:24px; font-weight:800; color:var(--text-1); }
+.chart-legend { display:flex; gap:14px; font-size:10.5px; color:var(--text-3); font-family:var(--font-mono); }
+.chart-legend .lg { display:flex; align-items:center; gap:5px; }
+.chart-legend .lg i { width:8px; height:8px; border-radius:2px; display:inline-block; }
+
+/* 系统资源大环形 */
+.res-deck { display:flex; justify-content:space-around; align-items:center; flex-wrap:wrap; gap:12px; height:100%; }
+.ring { display:flex; flex-direction:column; align-items:center; gap:8px; }
+.ring-circle { width:96px; height:96px; position:relative; }
+.ring-circle svg { transform:rotate(-90deg); }
+.ring-circle .r-track { fill:none; stroke:rgba(23,32,58,.06); stroke-width:7; }
+.ring-circle .r-prog { fill:none; stroke-width:7; stroke-linecap:round; filter:drop-shadow(0 0 4px rgba(37,99,255,.3)); transition:stroke-dashoffset .8s ease; }
+.ring-val { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.ring-val .rv-num { font-family:var(--font-mono); font-size:21px; font-weight:800; line-height:1; }
+.ring-val .rv-num small { font-size:10px; font-weight:600; color:var(--text-3); }
+.ring-label { font-size:10.5px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.5px; }
+
+/* 活跃会话 · 横向卡片流 */
+.sess-strip { display:flex; gap:12px; overflow-x:auto; padding:4px 2px 8px; scroll-snap-type:x mandatory; }
+.sess-strip::-webkit-scrollbar { height:5px; }
+.sess-strip::-webkit-scrollbar-thumb { background:rgba(37,99,255,.18); border-radius:3px; }
+.sess-card {
+  min-width:250px; max-width:250px; flex-shrink:0;
+  background:#fff; border:1px solid var(--border); border-radius:14px;
+  padding:14px 16px; scroll-snap-align:start;
+  transition:all .2s; position:relative; overflow:hidden;
+}
+.sess-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px;
+  background:var(--grad-main); opacity:.85; }
+.sess-card:hover { transform:translateY(-3px); box-shadow:var(--shadow-hover); border-color:rgba(37,99,255,.18); }
+.sess-top { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.sess-ava { width:40px; height:40px; border-radius:12px; flex-shrink:0; font-size:19px;
+  display:flex; align-items:center; justify-content:center; position:relative; }
+.sess-ava .ava-lamp { position:absolute; right:-2px; bottom:-2px; width:11px; height:11px; border-radius:50%;
+  border:2px solid #fff; }
+.lamp-live { background:var(--success); box-shadow:0 0 6px rgba(16,185,129,.8); }
+.lamp-ai   { background:var(--violet); box-shadow:0 0 6px rgba(124,58,237,.8); }
+.lamp-idle { background:#c3c9d6; }
+.lamp-err  { background:var(--danger); box-shadow:0 0 6px rgba(239,68,68,.8); }
+.sess-name { font-size:13.5px; font-weight:800; color:var(--text-1); line-height:1.2; }
+.sess-email { font-size:10px; color:var(--text-3); font-family:var(--font-mono); }
+.sess-status { margin-left:auto; }
+.sess-info { display:flex; flex-direction:column; gap:6px; }
+.sess-row { display:flex; justify-content:space-between; font-size:11px; font-family:var(--font-mono); }
+.sess-row .k { color:var(--text-3); }
+.sess-row .v { color:var(--text-1); font-weight:600; }
+.sess-prog { height:5px; border-radius:3px; background:rgba(23,32,58,.06); overflow:hidden; margin-top:6px; }
+.sess-prog i { display:block; height:100%; border-radius:3px; background:var(--grad-main); }
+
+/* 底部：时间轴感知 + 错误流 */
+.deck-bottom { display:grid; grid-template-columns:1.5fr 1fr; gap:16px; }
+/* 感知时间轴 */
+.timeline { position:relative; padding-left:20px; max-height:260px; overflow-y:auto; }
+.timeline::before { content:''; position:absolute; left:5px; top:6px; bottom:6px; width:2px;
+  background:linear-gradient(180deg, var(--primary), var(--violet)); opacity:.2; }
+.tl-item { position:relative; padding:7px 0 7px 14px; font-size:12px; }
+.tl-item::before { content:''; position:absolute; left:-20px; top:12px; width:10px; height:10px; border-radius:50%;
+  background:#fff; border:2.5px solid var(--primary); box-shadow:0 0 6px rgba(37,99,255,.4); }
+.tl-item.tl-ai::before { border-color:var(--violet); box-shadow:0 0 6px rgba(124,58,237,.4); }
+.tl-item.tl-warn::before { border-color:var(--warning); box-shadow:0 0 6px rgba(245,158,11,.4); }
+.tl-item.tl-ok::before { border-color:var(--success); box-shadow:0 0 6px rgba(16,185,129,.4); }
+.tl-time { font-family:var(--font-mono); font-size:9.5px; color:var(--text-3); font-weight:600; }
+.tl-text { color:var(--text-2); margin-top:1px; }
+.tl-text b { color:var(--text-1); font-weight:700; }
+.tl-text .hl { color:var(--violet); font-weight:700; }
+.tl-text .hlc { color:var(--primary); font-weight:700; }
+/* 错误流 */
+.err-flow { display:flex; flex-direction:column; gap:6px; max-height:260px; overflow-y:auto; }
+.err-item { display:flex; align-items:center; gap:9px; padding:8px 11px; border-radius:10px;
+  font-size:10.5px; font-family:var(--font-mono); border:1px solid transparent; }
+.err-item .e-time { color:var(--text-3); white-space:nowrap; }
+.err-item .e-lvl { font-weight:800; font-size:9px; text-transform:uppercase; white-space:nowrap; }
+.err-item .e-msg { color:var(--text-2); flex:1; line-height:1.5; }
+.err-warn { background:rgba(245,158,11,.05); border-color:rgba(245,158,11,.14); }
+.err-warn .e-lvl { color:#d97706; }
+.err-err { background:rgba(239,68,68,.05); border-color:rgba(239,68,68,.14); }
+.err-err .e-lvl { color:var(--danger); }
+
+/* ============ 账号面板 ============ */
+.acct-toolbar { display:flex; align-items:center; gap:9px; margin-bottom:18px; flex-wrap:wrap; }
+.search-box { display:flex; align-items:center; gap:7px; background:#fff; border:1px solid var(--border);
+  border-radius:12px; padding:6px 14px; box-shadow:var(--shadow-card); transition:all .15s; }
+.search-box:focus-within { border-color:var(--primary); box-shadow:0 0 0 3px rgba(37,99,255,.09); }
+.search-box input { background:transparent; border:none; outline:none; color:var(--text-1); font-size:12.5px;
+  font-family:var(--font-sans); width:170px; font-weight:500; }
+.filter-chip { padding:5px 14px; border:1px solid var(--border); border-radius:20px; font-size:11px;
+  font-weight:600; color:var(--text-2); cursor:pointer; transition:all .15s; background:#fff; }
+.filter-chip:hover { border-color:rgba(37,99,255,.3); color:var(--text-1); }
+.filter-chip.active { border-color:transparent; background:var(--grad-main); color:#fff;
+  box-shadow:0 3px 12px rgba(37,99,255,.25); font-weight:700; }
+
+.acct-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:14px; }
+.acct-card {
+  background:#fff; border:1px solid var(--border); border-radius:16px; padding:18px;
+  transition:all .2s; cursor:pointer; box-shadow:var(--shadow-card); position:relative; overflow:hidden;
+}
+.acct-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px;
+  background:linear-gradient(90deg, var(--primary), var(--violet)); opacity:0; transition:opacity .2s; }
+.acct-card:hover::before { opacity:1; }
+.acct-card:hover { transform:translateY(-3px); box-shadow:var(--shadow-hover); border-color:rgba(37,99,255,.16); }
+.acct-head { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+.acct-ava { width:44px; height:44px; border-radius:13px; font-size:20px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--grad-soft); border:1px solid rgba(37,99,255,.15); }
+.acct-name { font-size:14px; font-weight:800; color:var(--text-1); }
+.acct-email { font-size:10.5px; color:var(--text-3); font-family:var(--font-mono); }
+.acct-meta { display:flex; gap:18px; margin-bottom:14px; }
+.acct-meta .mi { display:flex; flex-direction:column; gap:2px; }
+.acct-meta .mi .mk { font-size:9.5px; color:var(--text-3); text-transform:uppercase; letter-spacing:.4px; font-weight:700; }
+.acct-meta .mi .mv { font-size:13px; font-family:var(--font-mono); font-weight:700; color:var(--text-1); }
+.acct-actions { display:flex; gap:5px; flex-wrap:wrap; }
+
+/* ============ 任务编排 ============ */
+.task-layout { display:flex; flex-direction:column; gap:16px; }
+.task-top { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.func-grid { display:flex; flex-direction:column; gap:12px; }
+.func-cat { font-size:10.5px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:.6px; margin-bottom:7px; }
+.func-chips { display:flex; flex-wrap:wrap; gap:7px; }
+.func-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 13px; border:1px solid var(--border);
+  border-radius:10px; font-size:11.5px; font-weight:600; color:var(--text-2); cursor:pointer;
+  transition:all .15s; background:#fafbfe; }
+.func-chip:hover { border-color:rgba(37,99,255,.3); color:var(--text-1); transform:translateY(-1px); }
+.func-chip.selected { border-color:transparent; background:var(--grad-main); color:#fff;
+  box-shadow:0 4px 14px rgba(37,99,255,.28); font-weight:700; }
+/* 任务管线 */
+.pipeline { display:flex; flex-direction:column; gap:0; padding:16px 6px 6px; }
+.pipe-node { display:flex; align-items:center; gap:10px; position:relative; padding-bottom:4px; }
+.pipe-node .pn-ico { width:34px; height:34px; border-radius:10px; flex-shrink:0; font-size:16px;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--grad-soft); border:1px solid rgba(37,99,255,.18); }
+.pipe-node .pn-name { font-family:var(--font-mono); font-size:12px; font-weight:700; color:var(--primary); }
+.pipe-node .pn-desc { font-size:10px; color:var(--text-3); }
+.pipe-node .pn-line { width:2px; height:26px; background:linear-gradient(180deg, var(--primary), var(--violet));
+  opacity:.3; margin-left:16px; }
+.dep-hint { margin-top:14px; padding:10px 14px; background:rgba(245,158,11,.07); border:1px solid rgba(245,158,11,.2);
+  border-radius:12px; font-size:11.5px; color:#b45309; font-weight:600; display:flex; align-items:center; gap:8px; }
+.task-bottom { display:flex; gap:8px; flex-wrap:wrap; }
+
+/* ============ AI 对话 ============ */
+.chat-shell { display:flex; flex-direction:column; height:calc(100vh - 56px - 44px - 64px); }
+.chat-msgs { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding:6px 4px; }
+.chat-msgs::-webkit-scrollbar { width:4px; }
+.chat-msgs::-webkit-scrollbar-thumb { background:rgba(37,99,255,.16); border-radius:2px; }
+.msg { display:flex; gap:12px; max-width:80%; }
+.msg.user { margin-left:auto; flex-direction:row-reverse; }
+.msg-ava { width:36px; height:36px; border-radius:12px; flex-shrink:0; font-size:18px;
+  display:flex; align-items:center; justify-content:center; }
+.msg.ai .msg-ava { background:var(--grad-soft); border:1px solid rgba(124,58,237,.2); }
+.msg.user .msg-ava { background:rgba(37,99,255,.08); border:1px solid rgba(37,99,255,.15); }
+.msg-bubble { padding:12px 16px; border-radius:14px; font-size:13px; line-height:1.7; }
+.msg.ai .msg-bubble { background:#fff; border:1px solid var(--border); box-shadow:var(--shadow-card); color:var(--text-1); border-left:3px solid var(--violet); }
+.msg.user .msg-bubble { background:var(--grad-main); color:#fff; border:none; box-shadow:0 4px 16px rgba(37,99,255,.25); }
+.msg-bubble .intent-tag { display:inline-block; margin-top:7px; font-family:var(--font-mono); font-size:9.5px;
+  color:var(--violet); border:1px solid rgba(124,58,237,.22); border-radius:5px; padding:2px 8px;
+  background:rgba(124,58,237,.05); font-weight:700; }
+.msg.user .intent-tag { color:rgba(255,255,255,.8); border-color:rgba(255,255,255,.3); background:rgba(255,255,255,.1); }
+.chat-bar { display:flex; gap:9px; align-items:center; margin-top:12px; }
+.chat-input { flex:1; background:#fff; border:1px solid var(--border); border-radius:14px; padding:11px 16px;
+  color:var(--text-1); font-size:13px; font-family:var(--font-sans); outline:none; font-weight:500;
+  box-shadow:var(--shadow-card); transition:all .15s; }
+.chat-input:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(37,99,255,.09); }
+.supervise-bar { display:flex; gap:8px; margin-top:12px; }
+
+/* ============ 徽章 ============ */
+.badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px;
+  font-size:10px; font-weight:800; font-family:var(--font-mono); border:1px solid transparent; }
+.badge::before { content:''; width:6px; height:6px; border-radius:50%; }
+.badge-success { color:#059669; border-color:rgba(16,185,129,.22); background:rgba(16,185,129,.08); }
+.badge-success::before { background:var(--success); }
+.badge-running { color:var(--primary); border-color:rgba(37,99,255,.22); background:rgba(37,99,255,.07); }
+.badge-running::before { background:var(--primary); animation:pulse-dot 1.5s infinite; }
+.badge-idle { color:var(--text-3); border-color:rgba(23,32,58,.1); background:rgba(23,32,58,.04); }
+.badge-idle::before { background:#c3c9d6; }
+.badge-error { color:var(--danger); border-color:rgba(239,68,68,.22); background:rgba(239,68,68,.08); }
+.badge-error::before { background:var(--danger); animation:pulse-dot 1s infinite; }
+.badge-warning { color:#d97706; border-color:rgba(245,158,11,.24); background:rgba(245,158,11,.1); }
+.badge-warning::before { background:var(--warning); }
+.badge-violet { color:var(--violet); border-color:rgba(124,58,237,.22); background:rgba(124,58,237,.08); }
+.badge-violet::before { background:var(--violet); }
+
+/* ============ 浮动 AI ============ */
+.fab { position:fixed; bottom:26px; right:26px; width:58px; height:58px; border-radius:50%;
+  background:var(--grad-main); border:none; cursor:pointer; font-size:26px; z-index:100;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 8px 28px rgba(37,99,255,.35), 0 0 50px rgba(124,58,237,.18);
+  transition:all .25s ease; animation:fab-pulse 3s ease-in-out infinite; }
+@keyframes fab-pulse { 0%,100%{box-shadow:0 8px 28px rgba(37,99,255,.35),0 0 50px rgba(124,58,237,.18);}
+  50%{box-shadow:0 8px 34px rgba(37,99,255,.5),0 0 70px rgba(124,58,237,.28);} }
+.fab:hover { transform:scale(1.08); }
+.fab.active { animation:none; }
+.chat-float { position:fixed; bottom:94px; right:26px; width:400px; height:520px;
+  background:rgba(255,255,255,.94); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+  border:1px solid rgba(37,99,255,.18); border-radius:18px;
+  box-shadow:0 16px 56px rgba(23,32,58,.14), 0 0 70px rgba(37,99,255,.09);
+  display:none; flex-direction:column; z-index:101; overflow:hidden; }
+.chat-float.open { display:flex; animation:float-in .25s ease; }
+@keyframes float-in { from{opacity:0; transform:translateY(12px) scale(.97);} to{opacity:1; transform:translateY(0) scale(1);} }
+.chat-float-head { padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:9px;
+  background:linear-gradient(90deg, rgba(37,99,255,.06), transparent); }
+.chat-float-head .cf-title { font-size:13.5px; font-weight:800; color:var(--text-1); flex:1; line-height:1.3; }
+.chat-float-head .cf-title .sub { font-size:9.5px; color:var(--text-3); font-family:var(--font-mono); font-weight:600; }
+.chat-float-body { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:9px; }
+.chat-float-body::-webkit-scrollbar { width:3px; }
+.chat-float-body::-webkit-scrollbar-thumb { background:rgba(37,99,255,.15); }
+.chat-float-input { padding:12px 14px; border-top:1px solid var(--border); display:flex; gap:8px; }
+.chat-float-input input { flex:1; background:var(--bg-input); border:1px solid var(--border); border-radius:10px;
+  padding:8px 14px; color:var(--text-1); font-size:12.5px; font-weight:500; outline:none; }
+.chat-float-input input:focus { border-color:var(--primary); }
+
+/* ============ 側邊浮層（運行日誌 / 錄制步驟） ============ */
+.side-float { position:fixed; bottom:94px; right:26px; width:430px; max-width:92vw; height:560px; max-height:80vh;
+  background:rgba(255,255,255,.94); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+  border:1px solid rgba(37,99,255,.18); border-radius:18px;
+  box-shadow:0 16px 56px rgba(23,32,58,.14), 0 0 70px rgba(37,99,255,.09);
+  display:none; flex-direction:column; z-index:101; overflow:hidden; }
+.side-float.open { display:flex; animation:float-in .25s ease; }
+.side-float-head { padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:9px;
+  background:linear-gradient(90deg, rgba(37,99,255,.06), transparent); }
+.side-float-head .sf-title { font-size:13.5px; font-weight:800; color:var(--text-1); flex:1; line-height:1.3; }
+.side-float-head .sf-title .sub { font-size:9.5px; color:var(--text-3); font-family:var(--font-mono); font-weight:600; }
+.side-float-body { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:6px;
+  font-family:var(--font-mono); font-size:11.5px; }
+.side-float-body::-webkit-scrollbar { width:3px; }
+.side-float-body::-webkit-scrollbar-thumb { background:rgba(37,99,255,.15); }
+.log-line { padding:4px 8px; border-radius:7px; background:var(--bg-input); border:1px solid var(--border);
+  color:var(--text-2); line-height:1.5; white-space:pre-wrap; word-break:break-all; }
+.log-line .lt { color:var(--text-3); margin-right:4px; }
+.log-line.lv-error { border-color:rgba(239,68,68,.32); color:#b91c1c; }
+.log-line.lv-warn { border-color:rgba(217,119,6,.32); color:#b45309; }
+.step-item { padding:8px 11px; border-radius:10px; background:var(--bg-input); border:1px solid var(--border);
+  color:var(--text-1); font-size:12px; line-height:1.5; }
+.step-item .st { color:var(--text-3); font-family:var(--font-mono); font-size:10px; }
+
+/* ============ Toast / Empty ============ */
+.toast-wrap { position:fixed; top:64px; left:50%; transform:translateX(-50%); z-index:200;
+  display:flex; flex-direction:column; gap:7px; pointer-events:none; }
+.toast { padding:11px 20px; border-radius:12px; font-size:12.5px; font-weight:700; display:flex; align-items:center;
+  gap:9px; animation:toast-in .3s ease; backdrop-filter:blur(12px); pointer-events:auto;
+  box-shadow:0 6px 20px rgba(23,32,58,.1); }
+@keyframes toast-in { from{opacity:0; transform:translateY(-10px);} to{opacity:1; transform:translateY(0);} }
+.toast-success { background:rgba(255,255,255,.97); border:1px solid rgba(16,185,129,.32); color:#059669; }
+.toast-error { background:rgba(255,255,255,.97); border:1px solid rgba(239,68,68,.32); color:var(--danger); }
+.toast-info { background:rgba(255,255,255,.97); border:1px solid rgba(37,99,255,.28); color:var(--primary); }
+.empty-state { text-align:center; padding:46px 20px; color:var(--text-3); }
+.empty-state .ei { font-size:36px; margin-bottom:12px; opacity:.6; }
+.empty-state .et { font-size:13px; font-weight:600; }
+
+@media (min-width:1500px){ .vitals-grid{grid-template-columns:repeat(4,1fr);} }
+
+/* —— 新增工具类（功能页 · API 接线用） —— */
+.inp { background:var(--bg-input); border:1px solid var(--border); border-radius:9px; padding:7px 11px; font-size:12px; color:var(--text-1); font-family:var(--font-sans); outline:none; transition:all .15s; }
+.inp:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(37,99,255,.15); }
+.lbl { font-size:12px; font-weight:600; color:var(--text-2); display:flex; flex-direction:column; gap:5px; }
+.kv { font-size:12.5px; line-height:2; color:var(--text-2); }
+.kv b { color:var(--text-1); }
+.diag { margin-top:10px; font-size:11.5px; color:var(--text-2); background:var(--bg-input); border:1px solid var(--border); border-radius:10px; padding:10px 12px; white-space:pre-wrap; font-family:var(--font-mono); }
+.hint { font-size:11.5px; color:var(--text-3); margin:10px 0; }
+.src-list { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+.src-item { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--bg-input); border:1px solid var(--border); border-radius:11px; font-size:12.5px; }
+.src-item .si-name { font-weight:700; color:var(--text-1); }
+.src-item .si-url { color:var(--text-3); font-family:var(--font-mono); font-size:11px; word-break:break-all; }
+.src-item .si-actions { margin-left:auto; display:flex; gap:6px; flex-shrink:0; }
+.stat-row { display:flex; gap:10px; margin:10px 0; flex-wrap:wrap; }
+.stat-pill { background:var(--bg-input); border:1px solid var(--border); border-radius:12px; padding:10px 16px; }
+.stat-pill .sp-num { font-family:var(--font-mono); font-size:20px; font-weight:800; color:var(--primary); }
+.stat-pill .sp-lbl { font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:.5px; }
+.data-table { width:100%; border-collapse:collapse; font-size:12px; }
+.data-table th { text-align:left; background:var(--bg-input); padding:10px 12px; font-size:10px; color:var(--text-3); text-transform:uppercase; border-radius:8px; }
+.data-table td { padding:10px 12px; border-bottom:1px solid var(--border); color:var(--text-2); vertical-align:top; }
+.data-table tr:hover td { background:var(--bg-hover); }
+code { background:var(--bg-input); border:1px solid var(--border); border-radius:5px; padding:1px 6px; font-family:var(--font-mono); font-size:11px; color:var(--primary); }
+.sess-strip { display:flex; gap:12px; overflow-x:auto; padding-bottom:6px; }
+.sess-card { min-width:230px; flex:1; background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:13px; box-shadow:var(--shadow-card); }
+.sess-top { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.sess-ava { width:38px; height:38px; border-radius:11px; display:flex; align-items:center; justify-content:center; font-size:18px; position:relative; }
+.ava-lamp { position:absolute; right:-2px; bottom:-2px; width:11px; height:11px; border-radius:50%; border:2px solid #fff; }
+.lamp-live { background:var(--success); } .lamp-ai { background:var(--violet); } .lamp-idle { background:var(--text-3); } .lamp-err { background:var(--danger); }
+.sess-name { font-weight:700; color:var(--text-1); font-size:13px; }
+.sess-email { font-size:11px; color:var(--text-3); font-family:var(--font-mono); }
+.sess-info { font-size:11.5px; }
+.sess-row { display:flex; justify-content:space-between; padding:3px 0; }
+.sess-row .k { color:var(--text-3); } .sess-row .v { color:var(--text-2); font-family:var(--font-mono); font-weight:600; }
+.sess-prog { height:5px; background:var(--bg-input); border-radius:3px; margin-top:8px; overflow:hidden; }
+.sess-prog i { display:block; height:100%; background:var(--grad-main); border-radius:3px; }
+</style>
+</head>
+<body>
+
+<!-- 背景层 -->
+<div class="bg-layer"><div class="bg-mesh"></div><div class="bg-grid"></div></div>
+
+<div class="app">
+
+  <!-- ===== 侧栏 ===== -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 36 36">
+          <defs><linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#2563ff"/><stop offset="100%" stop-color="#7c3aed"/>
+          </linearGradient></defs>
+          <circle cx="18" cy="18" r="3.5" fill="url(#bg2)"/>
+          <circle cx="6" cy="9" r="2.2" fill="#2563ff" opacity=".85"/>
+          <circle cx="30" cy="9" r="2.2" fill="#7c3aed" opacity=".85"/>
+          <circle cx="7" cy="27" r="2.2" fill="#0d9488" opacity=".8"/>
+          <circle cx="29" cy="27" r="2.2" fill="#7c3aed" opacity=".8"/>
+          <line x1="18" y1="18" x2="6" y2="9" stroke="#2563ff" stroke-width="1" opacity=".5"/>
+          <line x1="18" y1="18" x2="30" y2="9" stroke="#7c3aed" stroke-width="1" opacity=".5"/>
+          <line x1="18" y1="18" x2="7" y2="27" stroke="#0d9488" stroke-width="1" opacity=".5"/>
+          <line x1="18" y1="18" x2="29" y2="27" stroke="#7c3aed" stroke-width="1" opacity=".5"/>
+        </svg>
+      </div>
+      <div class="brand-text">OpenClaw<div class="sub">Command Deck</div></div>
+    </div>
+    <nav class="nav-list" id="navList">
+      <div class="nav-item active" data-page="monitor"><span class="nav-icon">📊</span> 全域監控<span class="nav-num">08</span></div>
+      <div class="nav-item" data-page="account"><span class="nav-icon">👤</span> 帳號環境<span class="nav-num">01</span></div>
+      <div class="nav-item" data-page="proxy"><span class="nav-icon">🌐</span> 代理池<span class="nav-num">02</span></div>
+      <div class="nav-item" data-page="task"><span class="nav-icon">⚡</span> 任務編排<span class="nav-num">03</span></div>
+      <div class="nav-item" data-page="policy"><span class="nav-icon">⚙️</span> 運營策略<span class="nav-num">04</span></div>
+      <div class="nav-item" data-page="source"><span class="nav-icon">📡</span> 社團數據源<span class="nav-num">05</span></div>
+      <div class="nav-item" data-page="clawchat"><span class="nav-icon">🧠</span> AI 對話<span class="nav-num">06</span></div>
+      <div class="nav-item" data-page="report"><span class="nav-icon">📋</span> 歷史報告<span class="nav-num">07</span></div>
+      <div class="nav-item" data-page="server"><span class="nav-icon">🖥️</span> 伺服器模型<span class="nav-num">09</span></div>
+      <div class="nav-item" data-page="groups"><span class="nav-icon">👥</span> 社團總覽<span class="nav-num">10</span></div>
+      <div class="nav-item" data-page="avatar"><span class="nav-icon">🖼️</span> 頭像管理<span class="nav-num">11</span></div>
+      <div class="nav-item" data-page="skills"><span class="nav-icon">🎓</span> 技能中心<span class="nav-num">12</span></div>
+      <div class="nav-item" data-page="memory"><span class="nav-icon">💾</span> 記憶體<span class="nav-num">13</span></div>
+    </nav>
+    <div class="sidebar-footer"><span class="status-dot"></span> Gateway · Online</div>
+  </aside>
+
+  <!-- ===== 主区 ===== -->
+  <div class="main">
+    <div class="status-ribbon"></div>
+    <header class="topbar">
+      <div class="topbar-title">
+        <span class="tt-main" id="pageTitle">全域監控</span>
+        <span class="tt-crumb" id="pageCrumb">/ monitor</span>
+      </div>
+      <div class="sys-strip">
+        <span class="sys-pill"><span class="pdot ok"></span>LLM</span>
+        <span class="sys-pill"><span class="pdot ok"></span>GATEWAY</span>
+        <span class="sys-pill"><span class="pdot warn"></span>WATCHDOG</span>
+        <span class="sys-pill"><span class="pdot ai"></span>監管 ON</span>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-sm" onclick="importBatchPrompt()">📥 批量匯入</button>
+        <button class="btn btn-sm" onclick="document.getElementById('acctFile').click()">📎 上傳檔案</button>
+        <button class="btn btn-sm btn-dark" onclick="bindProxyAll()">🔗 綁定代理</button>
+        <button class="btn btn-sm btn-dark" onclick="detectAccounts()">🔍 檢測</button>
+        <button class="btn btn-sm btn-violet" onclick="aiRunAll()">🤖 AI 執行</button>
+        <button class="btn btn-sm btn-dark" onclick="retileWindows()">🪟 重排</button>
+        <button class="btn btn-sm btn-dark" id="btnAutoRetile" onclick="toggleAutoRetile()">🔁 自動重排</button>
+        <button class="btn btn-sm btn-dark" onclick="demoStart()">⏺ 示范錄制</button>
+        <button class="btn btn-sm btn-dark" onclick="demoStop()">⏹ 示范停止</button>
+        <button class="btn btn-sm btn-dark" id="btnLog" onclick="openLogFloat()">📜 運行日誌</button>
+        <button class="btn btn-sm btn-dark" onclick="openDemoFloat()">👁 查看錄制</button>
+        <input id="acctFile" type="file" accept=".txt,.csv,.xlsx,.xls" style="display:none" onchange="onAcctFile(event)">
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- ============ 全域監控 · 指挥中心 ============ -->
+      <div class="page active" id="page-monitor">
+        <div class="deck-head">
+          <span class="deck-title">全域監控</span>
+          <span style="font-size:11px;color:var(--text-3);font-weight:600;">COMMAND CENTER</span>
+          <span class="live-pill" style="margin-left:auto;"><span class="ld"></span>LIVE · <span id="monitorTime">20:57:04</span></span>
+        </div>
+
+        <!-- 生命体征 -->
+        <div class="vitals-grid">
+          <div class="vital-card">
+            <div class="vc-top"><span class="vc-icon">🟢</span><span class="vc-label">活躍帳號</span></div>
+            <div class="vc-value"><span id="vActive">12</span><span class="unit" id="vActiveMax">/24</span></div>
+            <div class="vc-trend up">↑ +2 較上期</div>
+            <svg class="vc-spark" viewBox="0 0 200 44" preserveAspectRatio="none">
+              <polyline points="0,34 20,30 40,32 60,22 80,26 100,16 120,20 140,10 160,14 180,6 200,9"
+                fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round"/>
+              <polyline points="0,34 20,30 40,32 60,22 80,26 100,16 120,20 140,10 160,14 180,6 200,9"
+                fill="url(#spk1)" stroke="none"/>
+              <defs><linearGradient id="spk1" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#10b981" stop-opacity=".18"/><stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+              </linearGradient></defs>
+            </svg>
+          </div>
+          <div class="vital-card vio">
+            <div class="vc-top"><span class="vc-icon">🧠</span><span class="vc-label">AI 接管中</span></div>
+            <div class="vc-value" id="vAi">3</div>
+            <div class="vc-trend neutral">— 自動監管開啟</div>
+            <svg class="vc-spark" viewBox="0 0 200 44" preserveAspectRatio="none">
+              <polyline points="0,36 25,30 50,34 75,24 100,18 125,22 150,12 175,16 200,8"
+                fill="none" stroke="#7c3aed" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="vital-card teal">
+            <div class="vc-top"><span class="vc-icon">⚡</span><span class="vc-label">任務吞吐 / 分</span></div>
+            <div class="vc-value" id="vTput">47</div>
+            <div class="vc-trend up">↑ +12%</div>
+            <svg class="vc-spark" viewBox="0 0 200 44" preserveAspectRatio="none">
+              <polyline points="0,40 25,34 50,38 75,26 100,30 125,18 150,22 175,12 200,10"
+                fill="none" stroke="#0d9488" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="vital-card">
+            <div class="vc-top"><span class="vc-icon">⚠️</span><span class="vc-label">近期錯誤</span></div>
+            <div class="vc-value" id="vErr">5</div>
+            <div class="vc-trend down">↓ -3</div>
+            <svg class="vc-spark" viewBox="0 0 200 44" preserveAspectRatio="none">
+              <polyline points="0,8 25,12 50,10 75,20 100,16 125,28 150,24 175,34 200,30"
+                fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- 中部：任务吞吐波形 + 系统资源 -->
+        <div class="deck-mid">
+          <div class="glass-card">
+            <div class="chart-title"><span>📈 任務吞吐</span><span class="ct-num" style="margin-left:auto;" id="vTput2">47</span><span style="font-size:10.5px;color:var(--text-3);">/min</span></div>
+            <div class="chart-legend" style="margin-bottom:10px;">
+              <span class="lg"><i style="background:var(--primary);"></i>執行中</span>
+              <span class="lg"><i style="background:var(--violet);"></i>AI 編排</span>
+              <span class="lg"><i style="background:var(--teal);"></i>完成</span>
+            </div>
+            <div class="chart-wrap">
+              <svg viewBox="0 0 520 150" preserveAspectRatio="none" style="height:150px;">
+                <defs>
+                  <linearGradient id="area1" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#2563ff" stop-opacity=".22"/>
+                    <stop offset="100%" stop-color="#2563ff" stop-opacity="0"/>
+                  </linearGradient>
+                  <linearGradient id="area2" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#7c3aed" stop-opacity=".16"/>
+                    <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <!-- 网格 -->
+                <line x1="0" y1="30" x2="520" y2="30" stroke="rgba(23,32,58,.05)" stroke-width="1"/>
+                <line x1="0" y1="75" x2="520" y2="75" stroke="rgba(23,32,58,.05)" stroke-width="1"/>
+                <line x1="0" y1="120" x2="520" y2="120" stroke="rgba(23,32,58,.05)" stroke-width="1"/>
+                <!-- 面积 -->
+                <path d="M0,100 C40,92 60,96 90,80 C120,64 150,72 180,58 C210,44 240,54 270,40 C300,28 330,36 360,24 C390,16 420,26 450,16 C480,8 500,12 520,6 L520,150 L0,150 Z"
+                  fill="url(#area1)"/>
+                <path d="M0,118 C40,110 60,114 90,100 C120,88 150,96 180,82 C210,68 240,78 270,64 C300,52 330,60 360,48 C390,40 420,50 450,40 C480,32 500,36 520,30 L520,150 L0,150 Z"
+                  fill="url(#area2)"/>
+                <!-- 主线 -->
+                <path d="M0,100 C40,92 60,96 90,80 C120,64 150,72 180,58 C210,44 240,54 270,40 C300,28 330,36 360,24 C390,16 420,26 450,16 C480,8 500,12 520,6"
+                  fill="none" stroke="#2563ff" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M0,118 C40,110 60,114 90,100 C120,88 150,96 180,82 C210,68 240,78 270,64 C300,52 330,60 360,48 C390,40 420,50 450,40 C480,32 500,36 520,30"
+                  fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-dasharray="6 4"/>
+                <!-- 端点 -->
+                <circle cx="520" cy="6" r="4" fill="#2563ff" filter="drop-shadow(0 0 5px rgba(37,99,255,.5))"/>
+                <circle cx="520" cy="30" r="3.5" fill="#7c3aed" filter="drop-shadow(0 0 5px rgba(124,58,237,.5))"/>
+              </svg>
+            </div>
+            <div id="monTasks" class="kv" style="margin-top:12px;min-height:96px;"></div>
+          </div>
+
+          <div class="glass-card">
+            <div class="chart-title"><span>🖥️ 系統資源</span><span style="margin-left:auto;font-size:10.5px;color:var(--text-3);" id="sysCores">— core</span></div>
+            <div id="monSystem" class="kv" style="margin-bottom:8px;"></div>
+            <div id="monLoad"></div>
+            <div class="res-deck">
+              <div class="ring">
+                <div class="ring-circle">
+                  <svg width="96" height="96" viewBox="0 0 96 96">
+                    <circle class="r-track" cx="48" cy="48" r="40"/>
+                    <circle class="r-prog" id="ringCpu" cx="48" cy="48" r="40" stroke="#2563ff" stroke-dasharray="251.3" stroke-dashoffset="75"/>
+                  </svg>
+                  <div class="ring-val"><span class="rv-num" id="ringCpuVal">70<small>%</small></span></div>
+                </div>
+                <div class="ring-label">CPU</div>
+              </div>
+              <div class="ring">
+                <div class="ring-circle">
+                  <svg width="96" height="96" viewBox="0 0 96 96">
+                    <circle class="r-track" cx="48" cy="48" r="40"/>
+                    <circle class="r-prog" id="ringRam" cx="48" cy="48" r="40" stroke="#7c3aed" stroke-dasharray="251.3" stroke-dashoffset="55"/>
+                  </svg>
+                  <div class="ring-val"><span class="rv-num" id="ringRamVal">78<small>%</small></span></div>
+                </div>
+                <div class="ring-label">RAM</div>
+              </div>
+              <div class="ring">
+                <div class="ring-circle">
+                  <svg width="96" height="96" viewBox="0 0 96 96">
+                    <circle class="r-track" cx="48" cy="48" r="40"/>
+                    <circle class="r-prog" id="ringLoad" cx="48" cy="48" r="40" stroke="#0d9488" stroke-dasharray="251.3" stroke-dashoffset="150"/>
+                  </svg>
+                  <div class="ring-val"><span class="rv-num" id="ringLoadVal">40<small>%</small></span></div>
+                </div>
+                <div class="ring-label">負載</div>
+              </div>
+            </div>
+            <div id="monAgent" style="margin-top:14px;padding:10px 13px;background:var(--bg-input);border-radius:12px;font-size:11px;color:var(--text-2);border:1px solid var(--border);"></div>
+          </div>
+        </div>
+
+        <!-- 活跃会话 · 横向流 -->
+        <div style="margin-bottom:16px;">
+          <div class="card-title"><span class="title-icon">🪟</span> 活躍帳號視窗<span class="title-badge">activeSessions · <span id="monActiveCount">0</span></span></div>
+          <div class="sess-strip" id="monSessions">
+            <div class="sess-card">
+              <div class="sess-top">
+                <div class="sess-ava" style="background:var(--grad-soft);">🦊<span class="ava-lamp lamp-live"></span></div>
+                <div><div class="sess-name">蝦皮跨境·小芳</div><div class="sess-email">fang.bs@shop.tw</div></div>
+                <span class="badge badge-running sess-status">running</span>
+              </div>
+              <div class="sess-info">
+                <div class="sess-row"><span class="k">當前頁面</span><span class="v">groups/4521</span></div>
+                <div class="sess-row"><span class="k">運行時長</span><span class="v">2h 14m</span></div>
+                <div class="sess-row"><span class="k">出口 IP</span><span class="v">210.61.x.x</span></div>
+                <div class="sess-row"><span class="k">任務進度</span><span class="v">72%</span></div>
+                <div class="sess-prog"><i style="width:72%;"></i></div>
+              </div>
+            </div>
+            <div class="sess-card">
+              <div class="sess-top">
+                <div class="sess-ava" style="background:var(--grad-soft);">💄<span class="ava-lamp lamp-live"></span></div>
+                <div><div class="sess-name">美妝團購·Amy</div><div class="sess-email">amy.beauty@group.tw</div></div>
+                <span class="badge badge-running sess-status">running</span>
+              </div>
+              <div class="sess-info">
+                <div class="sess-row"><span class="k">當前頁面</span><span class="v">fb.com/feed</span></div>
+                <div class="sess-row"><span class="k">運行時長</span><span class="v">45m</span></div>
+                <div class="sess-row"><span class="k">出口 IP</span><span class="v">211.72.x.x</span></div>
+                <div class="sess-row"><span class="k">任務進度</span><span class="v">38%</span></div>
+                <div class="sess-prog"><i style="width:38%;"></i></div>
+              </div>
+            </div>
+            <div class="sess-card">
+              <div class="sess-top">
+                <div class="sess-ava" style="background:var(--grad-soft);">📱<span class="ava-lamp lamp-ai"></span></div>
+                <div><div class="sess-name">3C數位·阿哲</div><div class="sess-email">3c.aze@digital.tw</div></div>
+                <span class="badge badge-violet sess-status">AI 接管</span>
+              </div>
+              <div class="sess-info">
+                <div class="sess-row"><span class="k">當前頁面</span><span class="v">messages</span></div>
+                <div class="sess-row"><span class="k">運行時長</span><span class="v">1h 08m</span></div>
+                <div class="sess-row"><span class="k">出口 IP</span><span class="v">203.74.x.x</span></div>
+                <div class="sess-row"><span class="k">AI 意圖</span><span class="v" style="color:var(--violet);">chat_reply</span></div>
+                <div class="sess-prog"><i style="width:55%;background:linear-gradient(135deg,#7c3aed,#2563ff);"></i></div>
+              </div>
+            </div>
+            <div class="sess-card">
+              <div class="sess-top">
+                <div class="sess-ava" style="background:var(--grad-soft);">👗<span class="ava-lamp lamp-idle"></span></div>
+                <div><div class="sess-name">服飾批發·Mina</div><div class="sess-email">mina@wholesale.tw</div></div>
+                <span class="badge badge-idle sess-status">idle</span>
+              </div>
+              <div class="sess-info">
+                <div class="sess-row"><span class="k">當前頁面</span><span class="v">—</span></div>
+                <div class="sess-row"><span class="k">運行時長</span><span class="v">—</span></div>
+                <div class="sess-row"><span class="k">出口 IP</span><span class="v">118.16.x.x</span></div>
+                <div class="sess-row"><span class="k">任務進度</span><span class="v">0%</span></div>
+                <div class="sess-prog"><i style="width:0%;"></i></div>
+              </div>
+            </div>
+            <div class="sess-card">
+              <div class="sess-top">
+                <div class="sess-ava" style="background:var(--grad-soft);">💍<span class="ava-lamp lamp-err"></span></div>
+                <div><div class="sess-name">手作飾品·小宇</div><div class="sess-email">yu@jewelry.tw</div></div>
+                <span class="badge badge-error sess-status">error</span>
+              </div>
+              <div class="sess-info">
+                <div class="sess-row"><span class="k">當前頁面</span><span class="v" style="color:var(--danger);">checkpoint</span></div>
+                <div class="sess-row"><span class="k">運行時長</span><span class="v">3m</span></div>
+                <div class="sess-row"><span class="k">出口 IP</span><span class="v">125.22.x.x</span></div>
+                <div class="sess-row"><span class="k">看門狗</span><span class="v" style="color:var(--danger);">dead</span></div>
+                <div class="sess-prog"><i style="width:0%;background:linear-gradient(90deg,#ef4444,#f59e0b);"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 底部：感知时间轴 + 错误流 -->
+        <div class="deck-bottom">
+          <div class="glass-card">
+            <div class="card-title"><span class="title-icon">👁️</span> OpenClaw 即時感知<span class="title-badge">perception.events</span></div>
+            <div class="timeline" id="tlFeed">
+              <div class="tl-item tl-ai">
+                <div class="tl-time">20:56:58</div>
+                <div class="tl-text"><b>AI 接管</b> 帳號 <span class="hlc">3C數位·阿哲</span> — 偵測 checkpoint 彈窗，自動處理中</div>
+              </div>
+              <div class="tl-item tl-ok">
+                <div class="tl-time">20:56:47</div>
+                <div class="tl-text"><span class="hlc">蝦皮跨境·小芳</span> 完成社團瀏覽，按讚 3 篇貼文</div>
+              </div>
+              <div class="tl-item tl-ok">
+                <div class="tl-time">20:56:33</div>
+                <div class="tl-text"><span class="hlc">美妝團購·Amy</span> 加入社團「台灣團購好物分享」成功</div>
+              </div>
+              <div class="tl-item tl-ai">
+                <div class="tl-time">20:56:20</div>
+                <div class="tl-text"><span class="hlc">3C數位·阿哲</span> 自動回覆 2 條私訊，意圖 <span class="hl">product_inquiry</span></div>
+              </div>
+              <div class="tl-item tl-warn">
+                <div class="tl-time">20:56:05</div>
+                <div class="tl-text"><span class="hlc">手作飾品·小宇</span> 觸發風控檢測，進入 <span class="hl">error</span> 狀態</div>
+              </div>
+              <div class="tl-item tl-ok">
+                <div class="tl-time">20:55:50</div>
+                <div class="tl-text">全域監管週期完成，摘要：5 帳號 / 3 正常 / 1 接管 / 1 異常</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-title"><span class="title-icon">⚠️</span> 錯誤 / 警告<span class="title-badge">recentErrors</span></div>
+            <div class="err-flow" id="monErrors">
+              <div class="err-item err-err">
+                <span class="e-time">20:56:05</span><span class="e-lvl">ERROR</span>
+                <span class="e-msg">[session] 小宇 checkpoint 超時 → dead</span>
+              </div>
+              <div class="err-item err-warn">
+                <span class="e-time">20:53:40</span><span class="e-lvl">WARN</span>
+                <span class="e-msg">[watchdog] 阿哲窗口無響應 8s → 被動接管</span>
+              </div>
+              <div class="err-item err-warn">
+                <span class="e-time">20:50:30</span><span class="e-lvl">WARN</span>
+                <span class="e-msg">[proxy] 210.61.x.x 延遲 820ms 接近閾值</span>
+              </div>
+              <div class="err-item err-err">
+                <span class="e-time">20:48:10</span><span class="e-lvl">ERROR</span>
+                <span class="e-msg">[task] socialize 失敗，Mina 未登入</span>
+              </div>
+              <div class="err-item err-warn">
+                <span class="e-time">20:45:22</span><span class="e-lvl">WARN</span>
+                <span class="e-msg">[llm] DeepSeek 回應 3.2s → 本地兜底</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 帳號環境 ============ -->
+      <div class="page" id="page-account">
+        <div class="acct-toolbar">
+          <div class="search-box"><span>🔍</span><input id="acctSearch" type="text" placeholder="搜尋帳號 / 郵箱…" oninput="renderAccounts()"></div>
+          <span class="filter-chip active" data-f="all">全部 <b id="cntAll">0</b></span>
+          <span class="filter-chip" data-f="running">運行中 <b id="cntRun">0</b></span>
+          <span class="filter-chip" data-f="idle">空閒 <b id="cntIdle">0</b></span>
+          <span class="filter-chip" data-f="error">異常 <b id="cntErr">0</b></span>
+          <span class="filter-chip" data-f="offline">離線 <b id="cntOff">0</b></span>
+          <span class="filter-chip" id="acctSelInfo" style="background:var(--grad-soft);">已選 0</span>
+        </div>
+        <div class="acct-grid" id="acctGrid"></div>
+      </div>
+
+      <!-- ============ 任務編排 ============ -->
+      <div class="page" id="page-task">
+        <div class="task-layout">
+          <div class="task-top">
+            <div class="glass-card">
+              <div class="card-title"><span class="title-icon">⚡</span> FB 功能庫<span class="title-badge">19 skills</span></div>
+              <div class="func-grid">
+                <div><div class="func-cat">基礎</div><div class="func-chips">
+                  <span class="func-chip selected" data-task="login">🔐 登入帳號</span><span class="func-chip" data-task="sync">🔄 同步狀態</span><span class="func-chip" data-task="friends_list">👥 好友列表</span>
+                </div></div>
+                <div><div class="func-cat">內容</div><div class="func-chips">
+                  <span class="func-chip selected" data-task="browse_feed">📰 瀏覽動態</span><span class="func-chip" data-task="like_post">👍 按讚貼文</span><span class="func-chip" data-task="publish_post">✍️ 發布貼文</span><span class="func-chip selected" data-task="share_post">📤 分享貼文</span>
+                </div></div>
+                <div><div class="func-cat">社交擴張</div><div class="func-chips">
+                  <span class="func-chip" data-task="search_add_friend">🔍 搜尋加好友</span><span class="func-chip" data-task="add_friend_by_name">👤 按名稱加好友</span><span class="func-chip" data-task="send_message">💬 發送私訊</span>
+                  <span class="func-chip" data-task="send_message_by_name">📨 按名稱發私訊</span><span class="func-chip" data-task="join_groups">🏛️ 加入社團</span><span class="func-chip" data-task="invite_to_group">🤝 邀請進社團</span><span class="func-chip" data-task="invite_like_page">👍 邀請讚主頁</span>
+                </div></div>
+                <div><div class="func-cat">智能編排 / AI 接管 / 安全</div><div class="func-chips">
+                  <span class="func-chip selected" data-task="socialize">🤝 互加互聊</span><span class="func-chip" data-task="greet_new_friends">👋 問候新好友</span><span class="func-chip" data-task="content_dispatch">📡 內容分發</span>
+                  <span class="func-chip" data-task="ai_chat_reply">🧠 AI 聊天接管</span><span class="func-chip" data-task="risk_check">🛡️ 風控檢測</span>
+                </div></div>
+              </div>
+            </div>
+
+            <div class="glass-card">
+              <div class="card-title"><span class="title-icon">📋</span> 任務管線<span class="title-badge">renderSeq</span></div>
+              <div class="pipeline">
+                <div class="pipe-node">
+                  <div class="pn-ico">🔐</div>
+                  <div><div class="pn-name">login</div><div class="pn-desc">登入帳號 · 驗證環境</div></div>
+                  <div class="pn-line"></div>
+                </div>
+                <div class="pipe-node">
+                  <div class="pn-ico">📰</div>
+                  <div><div class="pn-name">browse_feed</div><div class="pn-desc">瀏覽動態 · 隨機點讚</div></div>
+                  <div class="pn-line"></div>
+                </div>
+                <div class="pipe-node">
+                  <div class="pn-ico">📤</div>
+                  <div><div class="pn-name">share_post</div><div class="pn-desc">分享貼文 · 讀取數據源</div></div>
+                  <div class="pn-line"></div>
+                </div>
+                <div class="pipe-node">
+                  <div class="pn-ico">🤝</div>
+                  <div><div class="pn-name">socialize</div><div class="pn-desc">互加互聊 · 智能編排</div></div>
+                </div>
+              </div>
+              <div class="dep-hint">⚠️ 分享貼文依賴主頁/社團數據源，請確認已配置</div>
+              <div style="margin-top:12px;display:flex;gap:7px;flex-wrap:wrap;">
+                <button class="btn btn-sm" onclick="previewPlan()">👁️ 預覽方案</button>
+                <button class="btn btn-sm btn-success" onclick="savePlan()">💾 保存編排</button>
+                <button class="btn btn-sm btn-violet" onclick="runSelected()">▶ 執行選中</button>
+                <button class="btn btn-sm btn-violet" onclick="runAllSmart()">⚡ 全部執行</button>
+                <button class="btn btn-sm btn-danger" onclick="abortAll()">⏹ 全部終止</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-title"><span class="title-icon">👥</span> 帳號分組<span class="title-badge">groups</span></div>
+            <div style="display:flex;gap:9px;flex-wrap:wrap;">
+              <span class="filter-chip active">A 組 · 蝦皮賣家 (5)</span>
+              <span class="filter-chip active">B 組 · 美妝團購 (4)</span>
+              <span class="filter-chip">C 組 · 3C 數位 (3)</span>
+              <span class="filter-chip">＋ 新建分組</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ AI 對話 ============ -->
+      <div class="page" id="page-clawchat">
+        <div class="glass-card" style="height:calc(100vh - 56px - 44px - 80px);display:flex;flex-direction:column;">
+          <div class="card-title" style="flex-shrink:0;">
+            <span class="title-icon">🧠</span> OpenClaw AI 對話
+            <span class="title-badge">POST /api/chat</span>
+            <button class="btn btn-sm btn-warning" style="margin-left:auto;" onclick="showToast('一鍵修復已完成','success')">🔧 一鍵修復</button>
+          </div>
+          <div class="chat-shell">
+            <div class="chat-msgs" id="chatMessages">
+              <div class="msg ai"><div class="msg-ava">🧠</div><div class="msg-bubble">
+                你好，我是 OpenClaw。請在下方輸入指令，例如「幫我執行所有帳號的社交擴張任務」或「生成一份運營監管報告」。<div class="intent-tag">intent: greeting</div>
+              </div></div>
+              <div style="padding:8px 12px;color:var(--text-3);font-size:12px;line-height:1.6;">
+                💡 試試點擊快捷指令，或直接在輸入框打字發送：<br>
+                <span class="chip" style="cursor:pointer;margin:4px 4px 0 0;display:inline-block;" onclick="setChat('幫我執行所有帳號的社交擴張任務')">社交擴張</span>
+                <span class="chip" style="cursor:pointer;margin:4px 4px 0 0;display:inline-block;" onclick="setChat('生成一份運營監管報告')">監管報告</span>
+                <span class="chip" style="cursor:pointer;margin:4px 4px 0 0;display:inline-block;" onclick="setChat('幫 001 發一則生活貼文')">發生活貼文</span>
+              </div>
+            </div>
+            <div class="supervise-bar">
+              <button class="btn btn-sm btn-violet" onclick="genSupervise()">📋 監管報告</button>
+              <button class="btn btn-sm">🔮 生成貼文</button>
+            </div>
+            <div class="chat-bar">
+              <input class="chat-input" type="text" placeholder="輸入指令或對話…" id="chatInput">
+              <button class="btn btn-primary btn-sm" onclick="sendChat()">發送 ▶</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 代理池 ============ -->
+      <div class="page" id="page-proxy">
+        <div class="glass-card">
+          <div class="card-title"><span class="title-icon">🌐</span> 代理池管理<span class="title-badge">GET /api/proxy</span></div>
+          <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="uploadProxyTxt()">📎 上傳 TXT</button>
+            <button class="btn btn-sm btn-success" onclick="testAllProxy()">⚡ 批量檢測</button>
+            <button class="btn btn-sm btn-violet" onclick="autoAssignProxy()">🔗 自動分配</button>
+            <button class="btn btn-sm btn-dark" onclick="exportProxyMap()">📥 匯出映射</button>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead><tr style="text-align:left;background:var(--bg-input);">
+              <th style="padding:10px 12px;font-size:10px;color:var(--text-3);text-transform:uppercase;border-radius:10px 0 0 10px;">名稱</th>
+              <th style="padding:10px 12px;font-size:10px;color:var(--text-3);text-transform:uppercase;">Host:Port</th>
+              <th style="padding:10px 12px;font-size:10px;color:var(--text-3);text-transform:uppercase;">狀態</th>
+              <th style="padding:10px 12px;font-size:10px;color:var(--text-3);text-transform:uppercase;">延遲</th>
+              <th style="padding:10px 12px;font-size:10px;color:var(--text-3);text-transform:uppercase;">綁定帳號</th>
+              <th style="padding:10px 12px;font-size:10px;color:var(--text-3);text-transform:uppercase;border-radius:0 10px 10px 0;">操作</th>
+            </tr></thead>
+            <tbody id="proxyBody" style="font-family:var(--font-mono);font-size:11.5px;">
+              <tr style="border-bottom:1px solid var(--border-2, rgba(23,32,58,.05));">
+                <td style="padding:11px 12px;font-family:var(--font-sans);font-weight:700;">DataImpulse-TW-01</td>
+                <td style="padding:11px 12px;color:var(--text-2);">10.0.0.1:8421</td>
+                <td style="padding:11px 12px;"><span class="badge badge-success">線上</span></td>
+                <td style="padding:11px 12px;color:var(--text-2);">120ms</td>
+                <td style="padding:11px 12px;">蝦皮·小芳</td>
+                <td style="padding:11px 12px;"><button class="btn btn-sm btn-dark">解綁</button></td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border-2, rgba(23,32,58,.05));">
+                <td style="padding:11px 12px;font-family:var(--font-sans);font-weight:700;">DataImpulse-TW-02</td>
+                <td style="padding:11px 12px;color:var(--text-2);">10.0.0.2:8421</td>
+                <td style="padding:11px 12px;"><span class="badge badge-success">線上</span></td>
+                <td style="padding:11px 12px;color:var(--text-2);">85ms</td>
+                <td style="padding:11px 12px;">美妝·Amy</td>
+                <td style="padding:11px 12px;"><button class="btn btn-sm btn-dark">解綁</button></td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border-2, rgba(23,32,58,.05));">
+                <td style="padding:11px 12px;font-family:var(--font-sans);font-weight:700;">DataImpulse-TW-04</td>
+                <td style="padding:11px 12px;color:var(--text-2);">10.0.0.4:8421</td>
+                <td style="padding:11px 12px;"><span class="badge badge-warning">延遲高</span></td>
+                <td style="padding:11px 12px;color:#d97706;font-weight:700;">820ms</td>
+                <td style="padding:11px 12px;color:var(--text-3);">—</td>
+                <td style="padding:11px 12px;"><button class="btn btn-sm btn-dark">分配</button></td>
+              </tr>
+              <tr>
+                <td style="padding:11px 12px;font-family:var(--font-sans);font-weight:700;">DataImpulse-TW-05</td>
+                <td style="padding:11px 12px;color:var(--text-2);">10.0.0.5:8421</td>
+                <td style="padding:11px 12px;"><span class="badge badge-idle">離線</span></td>
+                <td style="padding:11px 12px;color:var(--text-3);">—</td>
+                <td style="padding:11px 12px;color:var(--text-3);">—</td>
+                <td style="padding:11px 12px;"><button class="btn btn-sm btn-dark">分配</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============ 其他面板 ============ -->
+      <div class="page" id="page-policy">
+        <div class="glass-card">
+          <div class="card-title"><span class="title-icon">⚙️</span> 運營策略配置<span class="title-badge">GET/POST /api/policy</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;">
+            <div><div class="func-cat">每日操作上限</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
+                <label style="font-size:12px;font-weight:600;color:var(--text-2);">加好友 <input id="pfInvite" type="number" value="30" style="width:64px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:5px 9px;color:var(--primary);font-family:var(--font-mono);font-weight:700;margin-left:8px;"></label>
+                <label style="font-size:12px;font-weight:600;color:var(--text-2);">點讚 <input id="pfLike" type="number" value="50" style="width:64px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:5px 9px;color:var(--primary);font-family:var(--font-mono);font-weight:700;margin-left:8px;"></label>
+                <label style="font-size:12px;font-weight:600;color:var(--text-2);">分享 <input id="pfShare" type="number" value="10" style="width:64px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:5px 9px;color:var(--primary);font-family:var(--font-mono);font-weight:700;margin-left:8px;"></label>
+                <label style="font-size:12px;font-weight:600;color:var(--text-2);">私信 <input id="pfMsg" type="number" value="20" style="width:64px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:5px 9px;color:var(--primary);font-family:var(--font-mono);font-weight:700;margin-left:8px;"></label>
+              </div>
+            </div>
+            <div><div class="func-cat">真人行為延時</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
+                <label style="font-size:12px;font-weight:600;color:var(--text-2);">最小 (秒) <input id="pfMin" type="number" value="5" style="width:64px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:5px 9px;color:var(--primary);font-family:var(--font-mono);font-weight:700;margin-left:8px;"></label>
+                <label style="font-size:12px;font-weight:600;color:var(--text-2);">最大 (秒) <input id="pfMax" type="number" value="30" style="width:64px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:5px 9px;color:var(--primary);font-family:var(--font-mono);font-weight:700;margin-left:8px;"></label>
+              </div>
+            </div>
+            <div><div class="func-cat">重複過濾</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
+                <label style="font-size:12px;font-weight:700;color:var(--text-2);display:flex;align-items:center;gap:7px;"><input id="pfDedupInvite" type="checkbox" checked style="accent-color:var(--primary);width:15px;height:15px;"> 去重邀請</label>
+                <label style="font-size:12px;font-weight:700;color:var(--text-2);display:flex;align-items:center;gap:7px;"><input id="pfDedupShare" type="checkbox" checked style="accent-color:var(--primary);width:15px;height:15px;"> 去重分享</label>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:18px;"><button class="btn btn-sm btn-primary" onclick="savePolicy()">💾 保存策略</button></div>
+        </div>
+      </div>
+
+      <div class="page" id="page-source">
+        <div class="task-layout">
+          <div class="glass-card">
+            <div class="card-title"><span class="title-icon">📄</span> 公共主頁（邀請讚 / 分享來源）<span class="title-badge">GET /api/sources</span></div>
+            <div id="srcPages" class="src-list"></div>
+          </div>
+          <div class="glass-card">
+            <div class="card-title"><span class="title-icon">👥</span> 台灣社團（邀好友 / 加好友來源）<span class="title-badge">type:group</span></div>
+            <div id="srcGroups" class="src-list"></div>
+          </div>
+        </div>
+        <div class="glass-card" style="margin-top:16px;">
+          <div class="card-title"><span class="title-icon">➕</span> 新增數據源</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <select id="srcType" class="inp"><option value="page">公共主頁</option><option value="group">台灣社團</option></select>
+            <input id="srcUrl" class="inp" style="flex:1;min-width:220px;" placeholder="URL，例如 https://www.facebook.com/groups/xxxx">
+            <input id="srcName" class="inp" style="width:160px;" placeholder="名稱（可選）">
+            <button class="btn btn-sm btn-primary" onclick="addSource()">添加</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="page-report">
+        <div class="glass-card">
+          <div class="card-title"><span class="title-icon">📋</span> 歷史任務報告<span class="title-badge">GET /api/history</span></div>
+          <table class="data-table">
+            <thead><tr><th>任務 ID</th><th>範圍</th><th>類型</th><th>時間</th><th>狀態</th></tr></thead>
+            <tbody id="reportBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="page" id="page-server">
+        <div class="task-layout">
+          <div class="glass-card">
+            <div class="card-title"><span class="title-icon">🖥️</span> 服務端狀態（監管啟動器）<span class="title-badge">GET /api/status</span></div>
+            <div id="srvStatus" class="kv"></div>
+            <div style="display:flex;gap:7px;margin-top:12px;flex-wrap:wrap;">
+              <button class="btn btn-sm btn-dark" onclick="loadServer()">🔄 刷新</button>
+              <button class="btn btn-sm btn-warning" onclick="supervisorAction('restart')">♻️ 重啟</button>
+              <button class="btn btn-sm btn-danger" onclick="supervisorAction('stop')">⏹ 停止</button>
+              <button class="btn btn-sm btn-success" onclick="supervisorAction('start')">▶ 啟動</button>
+            </div>
+          </div>
+          <div class="glass-card">
+            <div class="card-title"><span class="title-icon">🧠</span> OpenClaw 模型設置<span class="title-badge">GET/POST /api/settings/openclaw</span></div>
+            <div style="display:flex;flex-direction:column;gap:9px;">
+              <label class="lbl">API Key<input id="ocApiKey" class="inp" placeholder="sk-..."></label>
+              <label class="lbl">模型<input id="ocModel" class="inp" placeholder="deepseek-chat"></label>
+              <label class="lbl">Base URL<input id="ocBaseUrl" class="inp" placeholder="https://..."></label>
+            </div>
+            <button class="btn btn-sm btn-primary" style="margin-top:12px;" onclick="saveOpenclaw()">💾 保存並熱生效</button>
+            <div id="ocDiagnose" class="diag"></div>
+          </div>
+        </div>
+        <div class="glass-card" style="margin-top:16px;">
+          <div class="card-title"><span class="title-icon">🔧</span> 一鍵修復</div>
+          <div style="font-size:12px;color:var(--text-2);margin-bottom:10px;">修復流程：停網關 → 還原安全基線 + 重注入模型 API → 重啟網關。</div>
+          <button class="btn btn-sm btn-violet" onclick="repairGateway()">🔧 執行修復</button>
+          <div id="repairSteps" class="diag"></div>
+        </div>
+      </div>
+
+      <div class="page" id="page-groups">
+        <div class="glass-card">
+          <div class="card-title"><span class="title-icon">👥</span> 社團總覽（跨帳號去重）<span class="title-badge">GET /api/groups/joined</span></div>
+          <div id="groupsBody" class="src-list"></div>
+        </div>
+        <div class="glass-card" style="margin-top:16px;">
+          <div class="card-title"><span class="title-icon">🔁</span> 每帳號加入數 / 重疊（協同風控提示）</div>
+          <table class="data-table">
+            <thead><tr><th>帳號</th><th>已加入</th><th>跨帳號重疊</th></tr></thead>
+            <tbody id="groupsPerAccount"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="page" id="page-avatar">
+        <div class="glass-card">
+          <div class="card-title"><span class="title-icon">🖼️</span> 頭像管理<span class="title-badge">GET /api/avatar/stats</span></div>
+          <div id="avatarStats" class="stat-row"></div>
+          <div class="toolbar" style="display:flex;gap:8px;align-items:center;margin:10px 0;flex-wrap:wrap">
+            <button class="btn btn-sm btn-primary" onclick="document.getElementById('avatarFileInput').click()">📤 上傳頭像</button>
+            <input id="avatarFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" style="display:none" onchange="uploadAvatar(this)">
+            <span class="hint" style="margin:0">從本機選圖直接寫入 inbox（支援 PNG/JPEG/WEBP/GIF/BMP，≤10MB）；下方每張可「替換到賬號」真正更換 FB 頭像。</span>
+          </div>
+          <div id="avatarInbox" class="src-list"></div>
+        </div>
+      </div>
+
+      <div class="page" id="page-skills">
+        <div class="glass-card">
+          <div class="card-title"><span class="title-icon">🎓</span> 技能中心<span class="title-badge">GET /api/skills</span></div>
+          <table class="data-table">
+            <thead><tr><th>技能</th><th>分類</th><th>說明</th><th>使用次</th><th>最後使用</th><th>狀態</th><th>操作</th></tr></thead>
+            <tbody id="skillBody"></tbody>
+          </table>
+          <div class="hint">在「帳號環境」勾選帳號後，可對勾選帳號執行已啟用技能。</div>
+        </div>
+      </div>
+
+      <div class="page" id="page-memory">
+        <div class="task-layout">
+          <div class="glass-card">
+            <div class="card-title"><span class="title-icon">💾</span> 帳號記憶碎片<span class="title-badge">GET /api/memory/shards</span></div>
+            <table class="data-table">
+              <thead><tr><th>帳號</th><th>事實</th><th>重要</th><th>近期</th><th>關係</th><th></th></tr></thead>
+              <tbody id="shardBody"></tbody>
+            </table>
+          </div>
+          <div class="glass-card">
+            <div class="card-title"><span class="title-icon">🌐</span> 全局知識庫（跨帳號學習沉澱）</div>
+            <textarea id="globalKnowledge" class="inp" style="width:100%;height:280px;resize:vertical;" readonly></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 浮动 AI -->
+<button class="fab" id="fab" onclick="toggleChat()">🧠</button>
+<div class="chat-float" id="chatFloat">
+  <div class="chat-float-head">
+    <span style="font-size:18px;">🧠</span>
+    <div class="cf-title">OpenClaw AI<div class="sub">neural · online</div></div>
+    <button class="btn btn-sm btn-ghost" onclick="showToast('一鍵修復已完成','success')">🔧</button>
+    <button class="btn btn-sm btn-ghost" onclick="toggleChat()">✕</button>
+  </div>
+  <div class="chat-float-body" id="floatBody">
+    <div class="msg ai" style="max-width:95%;"><div class="msg-ava">🧠</div><div class="msg-bubble">你好，我是 OpenClaw 智能體。有什麼可以幫你？</div></div>
+  </div>
+  <div class="chat-float-input">
+    <input type="text" placeholder="輸入指令…" id="floatInput" onkeydown="if(event.key==='Enter')sendFloat()">
+    <button class="btn btn-sm btn-primary" onclick="sendFloat()">▶</button>
+  </div>
+</div>
+
+<!-- 運行日誌 浮層 -->
+<div class="side-float" id="logFloat">
+  <div class="side-float-head">
+    <span style="font-size:18px;">📜</span>
+    <div class="sf-title">運行日誌<div class="sub">runtime · live</div></div>
+    <span class="live-pill" style="margin-right:4px;"><span class="ld"></span>自動刷新</span>
+    <button class="btn btn-sm btn-ghost" onclick="closeLogFloat()">✕</button>
+  </div>
+  <div class="side-float-body" id="logBox">載入中…</div>
+  <div class="chat-float-input" style="align-items:center;">
+    <span style="font-size:11px;color:var(--text-3);">每 2.5 秒拉取 /api/logs</span>
+    <button class="btn btn-sm btn-dark" style="margin-left:auto;" onclick="pollLogs(true)">立即刷新</button>
+  </div>
+</div>
+
+<!-- 錄制步驟 浮層 -->
+<div class="side-float" id="demoFloat">
+  <div class="side-float-head">
+    <span style="font-size:18px;">🎬</span>
+    <div class="sf-title">錄制步驟<div class="sub">demo · steps</div></div>
+    <button class="btn btn-sm btn-ghost" onclick="closeDemoFloat()">✕</button>
+  </div>
+  <div class="side-float-body" id="demoBox">請先在「帳號環境」勾選 1 個帳號，再點擊「👁 查看錄制」。</div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+/* ===================== Aike-FBclaw · Command Deck 前端邏輯 ===================== */
+/* 所有數據均來自真實後端 API（基址 /api，監管啟動器直連 127.0.0.1:18992） */
+
+const $ = (id) => document.getElementById(id);
+function esc(s){ if(s===null||s===undefined) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtTime(t){ if(!t) return ''; try { return new Date(t).toLocaleTimeString('zh-TW'); } catch(e){ return String(t); } }
+function kv(k,v){ return '<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-bottom:1px dashed var(--border);"><span style="color:var(--text-3);font-size:11px;">'+k+'</span><span style="font-weight:600;font-size:11px;text-align:right;">'+v+'</span></div>'; }
+function bar(label,pct){ pct=Math.max(0,Math.min(100,Math.round(pct||0))); const color=pct>85?'var(--danger)':(pct>60?'#d97706':'var(--teal)'); return '<div style="margin-top:8px;"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-2);"><span>'+label+'</span><span>'+pct+'%</span></div><div style="background:var(--bg-input);height:8px;border-radius:5px;overflow:hidden;margin-top:3px;"><div style="width:'+pct+'%;height:100%;background:'+color+';border-radius:5px;"></div></div></div>'; }
+
+/* ---------- Toast ---------- */
+function showToast(msg, type='info'){
+  const w=$('toastWrap'); if(!w) return;
+  const t=document.createElement('div'); t.className='toast toast-'+type;
+  const ic = type==='success'?'✅':type==='error'?'❌':type==='warn'?'⚠️':'ℹ️';
+  t.innerHTML = '<span>'+ic+'</span> '+esc(msg);
+  w.appendChild(t);
+  setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateY(-8px)'; t.style.transition='all .3s'; }, 2600);
+  setTimeout(()=>t.remove(), 3000);
+}
+
+/* ---------- 導航 ---------- */
+const navItems = document.querySelectorAll('.nav-item');
+const pages = document.querySelectorAll('.page');
+const pageTitle = $('pageTitle');
+const pageCrumb = $('pageCrumb');
+const titleMap = {
+  monitor:['全域監控','/ monitor'], account:['帳號環境管理','/ account'], proxy:['代理池管理','/ proxy'],
+  task:['任務編排編輯器','/ task'], policy:['運營策略配置','/ policy'], source:['社團數據源','/ source'],
+  clawchat:['OpenClaw AI 對話','/ clawchat'], report:['歷史任務報告','/ report'], server:['伺服器 & 模型','/ server'],
+  groups:['社團總覽','/ groups'], avatar:['頭像管理','/ avatar'], skills:['技能中心','/ skills'], memory:['記憶體','/ memory']
+};
+navItems.forEach(item => item.addEventListener('click', () => {
+  navItems.forEach(n => n.classList.remove('active')); item.classList.add('active');
+  const p = item.dataset.page;
+  pages.forEach(x => x.classList.remove('active'));
+  const pg = $('page-'+p); if(pg) pg.classList.add('active');
+  const [t,c] = titleMap[p] || ['',''];
+  if(pageTitle) pageTitle.textContent = t; if(pageCrumb) pageCrumb.textContent = c;
+  if(p==='proxy') loadProxies();
+  if(p==='policy') loadPolicy();
+  if(p==='report') loadHistory();
+  if(p==='source') loadSources();
+  if(p==='monitor') startMonitorPoll(); else stopMonitorPoll();
+  if(p==='skills') loadSkills();
+  if(p==='memory') loadMemory();
+  if(p==='server') loadServer();
+  if(p==='groups') loadGroups();
+  if(p==='avatar') loadAvatar();
+}));
+
+/* 功能 chips（任務編排）選中切換 */
+document.querySelectorAll('.func-chip').forEach(c => c.addEventListener('click', () => c.classList.toggle('selected')));
+function getSelectedTasks(){ return [...document.querySelectorAll('.func-chip.selected')].map(c=>c.dataset.task).filter(Boolean); }
+
+/* 帳號過濾 chips */
+let acctFilterMode = 'all';
+document.querySelectorAll('.acct-toolbar .filter-chip').forEach(c => {
+  c.addEventListener('click', () => {
+    if(c.id==='acctSelInfo') return;
+    document.querySelectorAll('.acct-toolbar .filter-chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    acctFilterMode = c.dataset.f || 'all';
+    renderAccounts();
+  });
+});
+
+/* ---------- 浮窗 ---------- */
+function toggleChat(){
+  const fab=$('fab'), fl=$('chatFloat'); if(!fab||!fl) return;
+  const open = fl.classList.toggle('open');
+  fab.classList.toggle('active', open); fab.textContent = open?'✕':'🧠';
+}
+
+/* ---------- 狀態 / 時間 ---------- */
+function updateTime(){
+  const n = new Date();
+  const tz = new Intl.DateTimeFormat('zh-TW',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(n);
+  const el=$('monitorTime'); if(el) el.textContent = tz;
+}
+setInterval(updateTime, 1000);
+
+/* ---------- 全域狀態 ---------- */
+let allAccounts=[], selectedAccounts=[], abortFlag=false, prevBlockers={}, currentAccount=null;
+
+/* ===================== 帳號環境 ===================== */
+async function loadAccounts(){
+  try{
+    const r=await fetch('/api/accounts'); const j=await r.json(); allAccounts=j.accounts||[];
+  }catch(e){ allAccounts=[]; }
+  let accToProxy={};
+  try{ const pr=await fetch('/api/proxy'); const pj=await pr.json(); (pj.proxies||[]).forEach(px=>{ if(px.boundAccount) accToProxy[px.boundAccount]=px.name; }); }catch(e){}
+  if(!currentAccount && allAccounts[0]) currentAccount = allAccounts[0].accountId;
+  renderAccounts(accToProxy);
+}
+function statusClass(a){
+  const s=(a.status||'').toLowerCase();
+  if(s==='active'||s==='正常'||s==='running'||s==='online') return {f:'running', lamp:'lamp-live', badge:'badge-success', label:(a.status||'運行中')};
+  if(s==='checkpoint'||s==='人脸复核'||s==='error'||s==='異常') return {f:'error', lamp:'lamp-err', badge:'badge-error', label:(a.status||'異常')};
+  if(s==='idle'||s==='空閒'||s==='空闲') return {f:'idle', lamp:'lamp-idle', badge:'badge-idle', label:(a.status||'空閒')};
+  return {f:'offline', lamp:'lamp-idle', badge:'badge-warning', label:(a.status||'離線')};
+}
+const AVATARS=['🦊','💄','📱','👗','💍','🐱','🐶','🌟','🍰','🎀','🚀','🌈'];
+function renderAccounts(accToProxy){
+  accToProxy=accToProxy||{};
+  const q=($('acctSearch').value||'').toLowerCase();
+  let run=0,idle=0,err=0,off=0;
+  allAccounts.forEach(a=>{ const f=statusClass(a).f; if(f==='running')run++; else if(f==='idle')idle++; else if(f==='error')err++; else off++; });
+  const set=(id,n)=>{ const e=$(id); if(e) e.textContent=n; };
+  set('cntAll', allAccounts.length); set('cntRun', run); set('cntIdle', idle); set('cntErr', err); set('cntOff', off);
+  const sel=$('acctSelInfo'); if(sel) sel.textContent='已選 '+selectedAccounts.length;
+  const grid=$('acctGrid'); if(!grid) return;
+  const list = allAccounts.filter(a=>{
+    const f=statusClass(a).f;
+    if(acctFilterMode!=='all' && f!==acctFilterMode) return false;
+    if(q){ const line=(a.name+' '+(a.accountId||'')+' '+(a.status||'')+' '+((accToProxy[a.name]||''))).toLowerCase(); if(line.indexOf(q)<0) return false; }
+    return true;
+  });
+  if(!list.length){ grid.innerHTML='<div style="color:var(--text-3);font-size:13px;padding:30px;text-align:center;">尚無符合條件的帳號</div>'; return; }
+  grid.innerHTML = list.map((a,i)=>{
+    const sc=statusClass(a);
+    const checked=selectedAccounts.includes(a.accountId)?'checked':'';
+    const proxy=accToProxy[a.name]||accToProxy[a.accountId];
+    const proxyCell = a.exitIp
+      ? '<span style="color:var(--teal)">出口 '+esc(a.exitIp)+'</span>'+(proxy?'<br><span style="font-size:11px;color:var(--text-3)">'+esc(proxy)+'</span>':'')
+      : (proxy?'<span style="color:var(--teal)">'+esc(proxy)+'</span>':'<span style="color:#d97706">未綁定代理</span>');
+    const em=AVATARS[i%AVATARS.length];
+    return '<div class="glass-card" style="position:relative;padding:14px;">'
+      + '<label style="position:absolute;top:12px;right:12px;cursor:pointer;"><input type="checkbox" '+checked+' data-id="'+esc(a.accountId)+'" onchange="toggleAcc(this.dataset.id,this.checked)"></label>'
+      + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
+      + '<div class="sess-ava" style="background:var(--grad-soft);">'+em+'<span class="ava-lamp '+sc.lamp+'"></span></div>'
+      + '<div style="min-width:0;"><div class="sess-name" style="font-weight:700;">'+esc(a.name)+'</div><div class="sess-email">'+esc(a.accountId)+'</div></div>'
+      + '</div>'
+      + '<span class="badge '+sc.badge+'">'+esc(sc.label)+'</span>'
+      + '<div class="sess-info" style="margin-top:10px;">'
+      + '<div class="sess-row"><span class="k">模式</span><span class="v">'+(a.mode==='real'?'真實登入':'模擬')+'</span></div>'
+      + '<div class="sess-row"><span class="k">代理</span><span class="v">'+proxyCell+'</span></div>'
+      + '</div>'
+      + '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">'
+      + '<button class="btn btn-sm btn-primary" onclick="launchEnv(\''+esc(a.accountId)+'\')">▶ 啟動</button>'
+      + '<button class="btn btn-sm btn-success" onclick="runSmart(\''+esc(a.accountId)+'\')">🤖 智能執行</button>'
+      + '<button class="btn btn-sm btn-danger" onclick="deleteAccountBtn(\''+esc(a.accountId)+'\')">🗑 刪除</button>'
+      + '</div></div>';
+  }).join('');
+}
+function toggleAcc(id, checked){ if(checked){ if(!selectedAccounts.includes(id)) selectedAccounts.push(id); } else { selectedAccounts=selectedAccounts.filter(x=>x!==id); } const sel=$('acctSelInfo'); if(sel) sel.textContent='已選 '+selectedAccounts.length; }
+async function launchEnv(id){ try{ const r=await fetch('/api/account/'+id+'/launch',{method:'POST'}); const j=await r.json(); showToast(j.success?'環境已啟動':'啟動失敗', j.success?'success':'error'); }catch(e){ showToast('啟動失敗：'+(e.message||e),'error'); } }
+async function deleteAccountBtn(id){
+  if(!confirm('確定刪除該帳號？同時會移除其綁定的代理與本地記憶，不可恢復。')) return;
+  try{
+    try{ await fetch('/api/account/'+id+'/close',{method:'POST'}); }catch(e){}
+    const r=await fetch('/api/accounts/'+encodeURIComponent(id),{method:'DELETE'}); const j=await r.json();
+    if(j.success){ showToast('已刪除帳號','success'); allAccounts=allAccounts.filter(a=>a.accountId!==id); selectedAccounts=selectedAccounts.filter(x=>x!==id); }
+    else showToast('刪除失敗','error');
+  }catch(e){ showToast('刪除失敗：'+(e.message||e),'error'); }
+  loadAccounts();
+}
+
+/* ===================== 代理池 ===================== */
+async function loadProxies(){
+  try{
+    const r=await fetch('/api/proxy'); const j=await r.json();
+    const tb=$('proxyBody'); if(!tb) return;
+    tb.innerHTML=(j.proxies||[]).map(function(px){
+      const st=px.alive?'<span class="badge badge-success">線上</span>':'<span class="badge badge-error">離線</span>';
+      const lat=(px.alive && px.latency!=null && px.latency>=0)?(px.latency+' ms'):'—';
+      const hostport=esc(px.host+':'+px.port);
+      const bound=px.boundAccount?esc(px.boundAccount):'<span style="color:var(--text-3)">—</span>';
+      const act = px.boundAccount
+        ? '<button class="btn btn-sm btn-dark" onclick="unbindProxy(\''+esc(px.id)+'\')">解綁</button>'
+        : '<button class="btn btn-sm btn-violet" onclick="autoAssignProxy()">分配</button>';
+      return '<tr>'
+        +'<td style="padding:11px 12px;font-family:var(--font-sans);font-weight:700;">'+esc(px.name||hostport)+'</td>'
+        +'<td style="padding:11px 12px;color:var(--text-2);">'+hostport+'</td>'
+        +'<td style="padding:11px 12px;">'+st+'</td>'
+        +'<td style="padding:11px 12px;color:var(--text-2);">'+lat+'</td>'
+        +'<td style="padding:11px 12px;">'+bound+'</td>'
+        +'<td style="padding:11px 12px;">'+act+'</td>'
+        +'</tr>';
+    }).join('') || '<tr><td colspan="6" style="color:var(--text-3);padding:14px;">尚無代理，點擊「上傳 TXT」匯入</td></tr>';
+  }catch(e){ const tb=$('proxyBody'); if(tb) tb.innerHTML='<tr><td colspan="6" style="color:var(--danger)">載入失敗：'+(e.message||e)+'</td></tr>'; }
+}
+function uploadProxyTxt(){ const inp=document.createElement('input'); inp.type='file'; inp.accept='.txt,.csv'; inp.onchange=function(){ importProxyFile(inp); }; inp.click(); }
+function importProxyFile(input){
+  const file=input.files[0]; if(!file) return;
+  const rd=new FileReader();
+  rd.onload=async function(){
+    const r=await fetch('/api/proxy/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:rd.result})});
+    const j=await r.json(); showToast('已匯入代理 '+(j.added||0)+' 條','success'); loadProxies();
+  };
+  rd.readAsText(file);
+}
+async function testAllProxy(){ showToast('正在批量連通檢測，請稍候...'); try{ const r=await fetch('/api/proxy/test-all',{method:'POST'}); const j=await r.json(); const ok=j.ok||0; const total=j.total||0; const avg=Math.round((j.results||[]).filter(x=>x.alive&&x.latency>=0).reduce((a,b)=>a+b.latency,0)/Math.max(1,ok)); showToast('連通檢測完成：正常 '+ok+'/'+total+(ok?('，平均延遲 '+avg+' ms'):''),'success'); }catch(e){ showToast('檢測失敗：'+(e.message||e),'error'); } loadProxies(); }
+async function autoAssignProxy(){ const r=await fetch('/api/proxy/auto-assign',{method:'POST'}); const j=await r.json(); showToast('已自動分配 '+(j.assigned||0)+' 個帳號','success'); loadAccounts(); loadProxies(); }
+async function unbindProxy(id){ await fetch('/api/proxy/'+id+'/unbind',{method:'POST'}); showToast('已解綁','success'); loadProxies(); loadAccounts(); }
+function exportProxyMap(){ window.open('/api/proxy'); }
+
+/* ===================== 運營策略 ===================== */
+async function loadPolicy(){
+  try{
+    const r=await fetch('/api/policy'); const j=await r.json(); const p=j.policy||{};
+    $('pfInvite').value=p.dailyInviteLimit!=null?p.dailyInviteLimit:20;
+    $('pfLike').value=p.dailyLikeLimit!=null?p.dailyLikeLimit:30;
+    $('pfShare').value=p.dailyShareLimit!=null?p.dailyShareLimit:15;
+    $('pfMsg').value=p.dailyMsgLimit!=null?p.dailyMsgLimit:20;
+    $('pfMin').value=p.minDelaySec!=null?p.minDelaySec:2;
+    $('pfMax').value=p.maxDelaySec!=null?p.maxDelaySec:8;
+    $('pfDedupInvite').checked=!!p.dedupInvite;
+    $('pfDedupShare').checked=!!p.dedupShare;
+  }catch(e){ showToast('策略載入失敗：'+(e.message||e),'error'); }
+}
+async function savePolicy(){
+  const p={
+    dailyInviteLimit:Number($('pfInvite').value),
+    dailyLikeLimit:Number($('pfLike').value),
+    dailyShareLimit:Number($('pfShare').value),
+    dailyMsgLimit:Number($('pfMsg').value),
+    minDelaySec:Number($('pfMin').value),
+    maxDelaySec:Number($('pfMax').value),
+    dedupInvite:$('pfDedupInvite').checked,
+    dedupShare:$('pfDedupShare').checked
+  };
+  await fetch('/api/policy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+  showToast('策略已保存','success');
+}
+
+/* ===================== 社團數據源 ===================== */
+async function loadSources(){
+  try{
+    const r=await fetch('/api/sources'); const j=await r.json();
+    const srcs=j.sources||[];
+    const pages=srcs.filter(s=>s.type==='page');
+    const groups=srcs.filter(s=>s.type==='group');
+    const pb=$('srcPages'); const gb=$('srcGroups');
+    pb.innerHTML = pages.map(s=>'<div class="src-item"><div class="si-name">'+esc(s.name)+'</div><div class="si-url"><a href="'+esc(s.url)+'" target="_blank" style="color:var(--primary);">'+esc(s.url)+'</a></div><div class="si-actions"><button class="btn btn-sm btn-danger" onclick="deleteSource(\''+esc(s.id)+'\')">刪除</button></div></div>').join('') || '<div style="color:var(--text-3);font-size:12px;padding:8px 0;">尚無公共主頁，填寫上方表單添加</div>';
+    gb.innerHTML = groups.map(s=>'<div class="src-item"><div class="si-name">'+esc(s.name)+'</div><div class="si-url"><a href="'+esc(s.url)+'" target="_blank" style="color:var(--primary);">'+esc(s.url)+'</a></div><div class="si-actions"><button class="btn btn-sm btn-danger" onclick="deleteSource(\''+esc(s.id)+'\')">刪除</button></div></div>').join('') || '<div style="color:var(--text-3);font-size:12px;padding:8px 0;">尚無社團，填寫上方表單添加</div>';
+  }catch(e){ showToast('數據源載入失敗：'+(e.message||e),'error'); }
+}
+async function addSource(){
+  const type=$('srcType').value, url=$('srcUrl').value.trim(), name=$('srcName').value.trim();
+  if(!url){ showToast('請先填寫 Facebook 網址','warn'); return; }
+  try{
+    const r=await fetch('/api/sources',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:type,url:url,name:name})});
+    const j=await r.json();
+    if(j.success){ showToast('已添加：'+(j.source&&j.source.name||name),'success'); $('srcUrl').value=''; $('srcName').value=''; loadSources(); }
+    else showToast('添加失敗：'+(j.error||''),'error');
+  }catch(e){ showToast('添加失敗：'+(e.message||e),'error'); }
+}
+async function deleteSource(id){ if(!confirm('確定刪除該數據源？')) return; await fetch('/api/sources/'+id,{method:'DELETE'}); showToast('已刪除','success'); loadSources(); }
+
+/* ===================== 歷史報告 ===================== */
+async function loadHistory(){
+  try{
+    const r=await fetch('/api/history'); const j=await r.json();
+    const tb=$('reportBody'); if(!tb) return;
+    tb.innerHTML=(j.history||[]).map(h=>'<tr><td>'+esc(h.taskId||'')+'</td><td>'+esc(h.scope||'')+'</td><td>'+esc(h.type||'')+'</td><td>'+esc((h.time||'').replace('T',' ').slice(0,16))+'</td><td>'+esc(h.status||'')+'</td></tr>').join('') || '<tr><td colspan="5" style="color:var(--text-3);padding:14px;">暫無任務記錄</td></tr>';
+  }catch(e){ const tb=$('reportBody'); if(tb) tb.innerHTML='<tr><td colspan="5" style="color:var(--danger)">載入失敗</td></tr>'; }
+}
+
+/* ===================== 任務執行 ===================== */
+function paramsFor(type){
+  if(type==='add_friends'||type==='search_add_friend') return {mode:'search', searchQuery:'台灣 美食', count:2};
+  if(type==='join_groups') return {keywords:['台灣美食','台灣旅遊','台灣生活'], count:1};
+  if(type==='browse_feed') return {like:true, scrollCount:4};
+  return {};
+}
+async function runTask(type, params, accountId){
+  const r=await fetch('/api/task/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:accountId, type:type, params:params||{}})});
+  return await r.json();
+}
+async function runSmartSequence(ids){
+  abortFlag=false;
+  const seq=['sync','browse_feed','add_friends','join_groups','greet_new_friends','ai_chat_reply'];
+  for(const id of ids){
+    if(abortFlag){ showToast('已終止','warn'); break; }
+    showToast('智能執行 '+id);
+    for(const step of seq){
+      if(abortFlag) break;
+      try{ await runTask(step, paramsFor(step), id); }catch(e){ showToast(id+' '+step+' 異常: '+(e.message||e),'error'); }
+      await new Promise(r=>setTimeout(r,800));
+    }
+  }
+  loadAccounts();
+}
+function runSmart(id){ runSmartSequence([id]); }
+function runAllSmart(){ runSmartSequence(allAccounts.map(a=>a.accountId)); }
+function runSelected(){
+  const tasks=getSelectedTasks();
+  if(!tasks.length){ showToast('請先在左側勾選功能，或直接點「全部執行」','warn'); return; }
+  const ids=selectedAccounts.length?selectedAccounts:allAccounts.map(a=>a.accountId);
+  runSeqForAccounts(ids, tasks.slice());
+}
+async function runSeqForAccounts(ids, seq){
+  abortFlag=false;
+  for(const id of ids){
+    if(abortFlag) break;
+    for(const step of seq){
+      if(abortFlag) break;
+      try{ await runTask(step, paramsFor(step), id); }catch(e){}
+      await new Promise(r=>setTimeout(r,600));
+    }
+  }
+  showToast('所選任務執行完成','success'); loadAccounts();
+}
+function abortAll(){ abortFlag=true; showToast('已發送終止信號','warn'); }
+function previewPlan(){ const t=getSelectedTasks(); showToast('方案：'+(t.length?t.join(' → '):'預設智能序列 sync → browse_feed → add_friends → join_groups → greet_new_friends → ai_chat_reply')); }
+function savePlan(){ localStorage.setItem('fbclaw_plan', JSON.stringify(getSelectedTasks())); showToast('編排方案已保存（本地）','success'); }
+
+/* ===================== AI 對話 ===================== */
+function setChat(txt){
+  const inp=$('chatInput'); if(!inp) return;
+  inp.value=txt; sendChat();
+}
+function msgBubble(role, ava, html){ return '<div class="msg '+role+'"><div class="msg-ava">'+ava+'</div><div class="msg-bubble">'+html+'</div></div>'; }
+async function sendChat(){
+  const inp=$('chatInput'), msgs=$('chatMessages'); if(!inp||!msgs) return;
+  const txt=inp.value.trim(); if(!txt) return;
+  msgs.innerHTML += msgBubble('user','👤',esc(txt)); inp.value=''; msgs.scrollTop=msgs.scrollHeight;
+  const acc=currentAccount || (allAccounts[0]&&allAccounts[0].accountId);
+  if(!acc){ showToast('請先匯入並選擇帳號','error'); return; }
+  try{
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:acc,message:txt})});
+    const j=await r.json();
+    const reply=(j.reply||(j.taskResult&&j.taskResult.success?'執行完成':'執行未完成'));
+    msgs.innerHTML += msgBubble('ai','🧠',esc(reply));
+  }catch(e){ msgs.innerHTML += msgBubble('ai','🧠','對話失敗：'+(e.message||e)); }
+  msgs.scrollTop=msgs.scrollHeight;
+}
+async function sendFloat(){
+  const inp=$('floatInput'), body=$('floatBody'); if(!inp||!body) return;
+  const txt=inp.value.trim(); if(!txt) return;
+  body.innerHTML += msgBubble('user','👤',esc(txt)); inp.value=''; body.scrollTop=body.scrollHeight;
+  const acc=currentAccount || (allAccounts[0]&&allAccounts[0].accountId);
+  if(!acc){ showToast('請先匯入並選擇帳號','error'); return; }
+  try{
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:acc,message:txt})});
+    const j=await r.json();
+    const reply=(j.reply||(j.taskResult&&j.taskResult.success?'執行完成':'執行未完成'));
+    body.innerHTML += msgBubble('ai','🧠',esc(reply));
+  }catch(e){ body.innerHTML += msgBubble('ai','🧠','對話失敗：'+(e.message||e)); }
+  body.scrollTop=body.scrollHeight;
+}
+async function genSupervise(){
+  const msgs=$('chatMessages'); if(!msgs) return;
+  msgs.innerHTML += msgBubble('ai','🧠','OpenClaw 正在生成運營監管報告…'); msgs.scrollTop=msgs.scrollHeight;
+  try{
+    const r=await fetch('/api/agent/supervise',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const j=await r.json(); const rep=j.report||{};
+    let html='<b>📊 運營監管報告</b><br>';
+    html+=(rep.llmSummary||'')+'<br><br><b>帳號狀態：</b><br>';
+    (rep.accounts||[]).forEach(a=>{ html+='• '+esc(a.accountId)+' ｜ '+esc(a.status)+' ｜ 風控:'+esc(a.riskLevel)+'<br>'; });
+    html+='<br><b>進化建議：</b><br>';
+    (rep.suggestions||[]).forEach(s=>{ html+='• '+esc(s)+'<br>'; });
+    msgs.innerHTML += msgBubble('ai','🧠',html);
+  }catch(e){ msgs.innerHTML += msgBubble('ai','🧠','監管報告生成失敗：'+(e.message||e)); }
+  msgs.scrollTop=msgs.scrollHeight;
+}
+$('chatInput') && $('chatInput').addEventListener('keydown', e=>{ if(e.key==='Enter') sendChat(); });
+
+/* ===================== 全域監控 ===================== */
+let monitorTimer=null;
+function setRing(circleId, valId, pct){
+  pct=Math.max(0,Math.min(100,Math.round(pct||0)));
+  const c=$(circleId); if(c) c.style.strokeDashoffset=(251.3*(1-pct/100)).toFixed(1);
+  const v=$(valId); if(v) v.innerHTML=pct+'<small>%</small>';
+}
+function sessionBadge(a){
+  const s=(a.status||'').toLowerCase();
+  if(s.indexOf('ai')>=0||s.indexOf('接管')>=0) return {lamp:'lamp-ai', badge:'badge-violet', label:a.status||'AI 接管'};
+  if(s.indexOf('checkpoint')>=0||s.indexOf('error')>=0||s.indexOf('異常')>=0) return {lamp:'lamp-err', badge:'badge-error', label:a.status||'error'};
+  if(s.indexOf('idle')>=0||s.indexOf('空閒')>=0) return {lamp:'lamp-idle', badge:'badge-idle', label:a.status||'idle'};
+  return {lamp:'lamp-live', badge:'badge-running', label:a.status||'running'};
+}
+async function loadMonitor(){
+  try{
+    const r=await fetch('/api/monitor/state'); const j=await r.json(); const s=j.snapshot; if(!s) return;
+    const sys=s.system||{}, load=s.load||{}, ag=s.agent||{}, sess=s.activeSessions||[];
+    const aiCount=sess.filter(a=>{ const x=(a.status||'').toLowerCase(); return x.indexOf('ai')>=0||x.indexOf('接管')>=0; }).length;
+    const tp=s.taskThroughput||{};
+    if($('vActive')) $('vActive').textContent=load.active!=null?load.active:'-';
+    if($('vActiveMax')) $('vActiveMax').textContent='/'+((load.max!=null)?load.max:'-');
+    if($('vAi')) $('vAi').textContent=aiCount;
+    if($('vTput')) $('vTput').textContent=tp.lastMinute!=null?tp.lastMinute:'-';
+    if($('vTput2')) $('vTput2').textContent=tp.lastMinute!=null?tp.lastMinute:'-';
+    if($('vErr')) $('vErr').textContent=(s.recentErrors||[]).length;
+    if($('sysCores')) $('sysCores').textContent=(sys.cpuCores||'-')+' core';
+    if($('monSystem')) $('monSystem').innerHTML=kv('OS',esc(sys.os))+kv('CPU',esc(sys.cpuModel)+' · '+sys.cpuCores+' 核')+kv('GPU',esc(sys.gpu))+kv('螢幕',sys.screen?sys.screen.width+'×'+sys.screen.height:'-')+kv('記憶體','總 '+(sys.totalRamGB||'-')+'GB ｜ 剩 '+((sys.freeRamGB!=null)?sys.freeRamGB.toFixed(1):'-')+'GB');
+    if($('monLoad')) $('monLoad').innerHTML=bar('記憶體使用',load.memPct)+bar('並發佔用',load.cpuPct)+'<div style="margin-top:6px;font-size:11px;color:var(--text-2);">活躍視窗：'+(load.active||0)+' / 最大 '+(load.max||0)+'</div>';
+    setRing('ringCpu','ringCpuVal',load.cpuPct);
+    setRing('ringRam','ringRamVal',load.memPct);
+    setRing('ringLoad','ringLoadVal',Math.round((load.active||0)/Math.max(1,load.max||1)*100));
+    if($('monActiveCount')) $('monActiveCount').textContent=sess.length;
+    if($('monSessions')) $('monSessions').innerHTML = (sess.length?sess.map((a,i)=>{
+      const sc=sessionBadge(a);
+      const blocker=a.blocker?'<div style="margin-top:6px;"><span class="badge badge-error">⚠ 阻塞：'+esc(a.blocker)+'</span></div>':'';
+      const stuck=a.stuckSince?'<div style="font-size:11px;color:var(--danger);margin-top:4px;">卡頓自：'+fmtTime(a.stuckSince)+'</div>':'';
+      const wd=a.lastWatchdogAction?'<div style="font-size:11px;color:#d97706;margin-top:2px;">看門狗：'+esc(a.lastWatchdogAction)+'</div>':'';
+      return '<div class="sess-card"><div class="sess-top">'
+        +'<div class="sess-ava" style="background:var(--grad-soft);">'+AVATARS[i%AVATARS.length]+'<span class="ava-lamp '+sc.lamp+'"></span></div>'
+        +'<div><div class="sess-name">'+esc(a.name)+'</div><div class="sess-email">'+esc(a.accountId)+'</div></div>'
+        +'<span class="badge '+sc.badge+' sess-status">'+esc(sc.label)+'</span></div>'
+        +'<div class="sess-info">'
+        +'<div class="sess-row"><span class="k">當前頁面</span><span class="v">'+esc(a.url||'—')+'</span></div>'
+        +'<div class="sess-row"><span class="k">運行時長</span><span class="v">'+Math.floor((a.uptimeSec||0)/60)+'m</span></div>'
+        +'<div class="sess-row"><span class="k">出口 IP</span><span class="v">'+esc(a.exitIp||'—')+'</span></div>'
+        +'<div class="sess-row"><span class="k">PID</span><span class="v">'+(a.pid||'—')+'</span></div>'
+        +blocker+stuck+wd+'</div></div>';
+    }).join(''):'<div class="sess-card" style="color:var(--text-3)">目前無活躍視窗</div>');
+    try{
+      const cur={}; sess.forEach(a=>{ if(a.blocker) cur[a.accountId]=a.blocker; });
+      Object.keys(cur).forEach(id=>{ if(prevBlockers[id]!==cur[id]) showToast('⚠ '+id+' 阻塞：'+cur[id],'warn'); });
+      prevBlockers=cur;
+    }catch(e){}
+    if($('monAgent')) $('monAgent').innerHTML='LLM 可達：'+(ag.llmReachable?'<span style="color:var(--teal)">是</span>':'<span style="color:var(--danger)">否</span>')
+      +'<br>自動監管：'+(ag.autoSuperviseOn?'<span style="color:var(--teal)">運行中</span>':'<span style="color:#d97706">關閉</span>')
+      +'<br>最後探活：'+(ag.lastCallAt?fmtTime(ag.lastCallAt):'-')
+      +'<br>最後監管：'+(ag.lastSuperviseAt?fmtTime(ag.lastSuperviseAt):'-')
+      +'<br>錯誤計數：'+(ag.errorCount||0)
+      +'<div style="margin-top:6px;color:var(--text-3)">'+esc(ag.summary||'')+'</div>'
+      +((ag.suggestions&&ag.suggestions.length)?('<div style="margin-top:6px"><b>建議：</b><br>'+ag.suggestions.map(x=>'• '+esc(x)).join('<br>')+'</div>'):'');
+    if($('monErrors')) $('monErrors').innerHTML=(s.recentErrors&&s.recentErrors.length?s.recentErrors.map(e=>{
+      const cls=(e.level||'').toLowerCase()==='error'?'err-err':((e.level||'').toLowerCase()==='warn'?'err-warn':'err-info');
+      return '<div class="err-item '+cls+'"><span class="e-time">'+esc(e.time)+'</span><span class="e-lvl">'+esc((e.level||'').toUpperCase())+'</span><span class="e-msg">['+esc(e.module)+'] '+esc(e.message)+'</span></div>';
+    }).join(''):'<div class="err-item" style="color:var(--teal)">暫無錯誤</div>');
+    if($('monTasks')) $('monTasks').innerHTML=((tp.recent&&tp.recent.length)?tp.recent.map(t=>'• '+esc((t.time||'').replace('T',' ').slice(0,16))+' ｜ '+esc(t.scope||'')+' ｜ '+esc(t.type||'')+' ｜ '+esc(t.status||'')).join('<br>'):'<span style="color:var(--text-3)">暫無任務記錄</span>');
+    try{
+      const pr=await fetch('/api/perception'); const pj=await pr.json();
+      const evs=pj.events||[];
+      const tl=$('tlFeed'); if(tl){
+        tl.innerHTML=(evs.length?evs.slice().reverse().slice(0,14).map(e=>{
+          const ty=(e.type||'').toLowerCase();
+          const cls=(ty.indexOf('error')>=0||ty.indexOf('block')>=0||ty.indexOf('checkpoint')>=0)?'tl-warn':((ty.indexOf('ai')>=0||ty.indexOf('接管')>=0||ty.indexOf('chat')>=0)?'tl-ai':'tl-ok');
+          const txt=(e.friend?('帳號 <span class="hlc">'+esc(e.friend)+'</span> '):'')+(e.message?esc(e.message):esc(e.type));
+          return '<div class="tl-item '+cls+'"><div class="tl-time">'+fmtTime(e.ts)+'</div><div class="tl-text">'+txt+'</div></div>';
+        }).join(''):'<div class="tl-item tl-ok"><div class="tl-time">--</div><div class="tl-text">尚無感知事件</div></div>');
+      }
+    }catch(e){}
+  }catch(e){}
+}
+function startMonitorPoll(){ if(monitorTimer) return; loadMonitor(); monitorTimer=setInterval(loadMonitor,3000); }
+function stopMonitorPoll(){ if(monitorTimer){ clearInterval(monitorTimer); monitorTimer=null; } }
+
+/* ===================== 伺服器 & 模型 ===================== */
+async function loadServer(){
+  try{
+    const r=await fetch('/api/status'); const j=await r.json();
+    const gw=j.gatewayReachable?'<span style="color:var(--teal)">● 可達</span>':'<span style="color:var(--danger)">● 不可達</span>';
+    const wd=j.watchdogRunning?'<span style="color:var(--teal)">● 運行中</span>':'<span style="color:#d97706">○ 未運行</span>';
+    const sv=(j.supervisor&&j.supervisor.supervisorRunning)?'<span style="color:var(--teal)">● 監管運行中</span>':'<span style="color:var(--text-3)">○ 監管未運行（開發模式）</span>';
+    $('srvStatus').innerHTML=kv('服務端','運行中（已運行 '+Math.round(j.uptimeSec||0)+'s）')+kv('OpenClaw 網關',gw)+kv('會話看門狗',wd)+kv('監管啟動器',sv)+kv('累計重啟',((j.supervisor&&j.supervisor.restarts)||0)+' 次');
+  }catch(e){ $('srvStatus').innerHTML='<span style="color:var(--danger)">狀態獲取失敗：'+(e.message||e)+'</span>'; }
+  try{
+    const r=await fetch('/api/settings/openclaw'); const j=await r.json();
+    if(j.settings){ $('ocBaseUrl').value=j.settings.baseUrl||''; $('ocApiKey').value=j.settings.apiKey||''; $('ocModel').value=j.settings.model||''; }
+    const d=j.diagnose||{};
+    $('ocDiagnose').innerHTML='網關配置可讀：'+(d.readable?'是':'否')+' ｜ 含模型：'+(d.hasModel?'是':'否')+' ｜ 含 API Key：'+(d.hasApiKey?'是':'否');
+  }catch(e){}
+}
+async function saveOpenclaw(){
+  const body={ baseUrl:$('ocBaseUrl').value, apiKey:$('ocApiKey').value, model:$('ocModel').value };
+  const r=await fetch('/api/settings/openclaw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const j=await r.json();
+  showToast(j.ok?('已保存'+(j.applied?'，已套用到網關':'，但網關套用失敗：'+(j.error||''))):'保存失敗', j.ok?'success':'error');
+  loadServer();
+}
+async function repairGateway(){
+  showToast('修復中...');
+  try{
+    const r=await fetch('/api/openclaw/repair',{method:'POST'}); const j=await r.json();
+    let msg=(j.ok?'修復完成':'修復失敗：'+(j.error||''));
+    if(j.steps) msg+='\n'+j.steps.join('\n');
+    if(j.gatewayReachable!==undefined) msg+='\n網關可達：'+j.gatewayReachable;
+    $('repairSteps').textContent=msg;
+  }catch(e){ $('repairSteps').textContent='修復失敗：'+(e.message||e); }
+  loadServer();
+}
+async function supervisorAction(act){
+  try{
+    const r=await fetch('http://127.0.0.1:18992/'+act,{method:'POST'}); const j=await r.json();
+    showToast((j.ok?'已'+act:'操作失敗')+(j.serverPid?(' PID='+j.serverPid):''), j.ok?'success':'error');
+  }catch(e){ showToast('監管未運行，無法操作（'+(e.message||e)+'）','error'); }
+  setTimeout(loadServer,1200);
+}
+
+/* ===================== 社團總覽 ===================== */
+async function loadGroups(){
+  try{
+    const r=await fetch('/api/groups/joined'); const j=await r.json();
+    const pa=(j.perAccount||[]).map(a=>'<tr><td>'+esc(a.name)+'</td><td>'+esc(a.joined||0)+'</td><td>'+(a.overlap?('<span style="color:#d97706">'+a.overlap+'</span>'):'0')+'</td></tr>').join('') || '<tr><td colspan="3" style="color:var(--text-3)">尚無數據</td></tr>';
+    const paEl=$('groupsPerAccount'); if(paEl) paEl.innerHTML=pa;
+    const gb=$('groupsBody'); if(gb) gb.innerHTML=(j.groups||[]).map(g=>{
+      const overlap=(g.by&&g.by.length>1)?'<span style="color:#d97706">'+g.by.length+' 帳號同加</span>':'安全';
+      const by=(g.by||[]).join(', ');
+      return '<div class="src-item"><div class="si-name">'+esc(g.name||g.url)+' <span style="font-size:11px;color:var(--text-3)">'+esc(g.region||'')+'</span></div>'
+        +'<div class="si-url">'+esc(g.url)+' ｜ 成員 '+esc(g.members||'-')+' ｜ 加入 '+(g.addedAt?new Date(g.addedAt).toLocaleDateString('zh-TW'):'-')+' ｜ 協同 '+overlap+'</div>'
+        +'<div class="si-actions">'+esc(by)+'</div></div>';
+    }).join('') || '<div style="color:var(--text-3);font-size:12px;padding:8px 0;">尚無社團數據</div>';
+  }catch(e){ const gb=$('groupsBody'); if(gb) gb.innerHTML='<div style="color:var(--danger)">載入失敗：'+(e.message||e)+'</div>'; }
+}
+
+/* ===================== 頭像管理 ===================== */
+let AVATAR_ACCOUNTS = [];
+async function loadAvatarAccounts(){
+  try{ const r=await fetch('/api/accounts'); const j=await r.json(); AVATAR_ACCOUNTS=(j.accounts||[]).map(a=>({id:a.accountId,name:a.name||a.accountId})); }catch(e){ AVATAR_ACCOUNTS=[]; }
+}
+function avatarAccountOptions(selId){
+  if(!AVATAR_ACCOUNTS.length) return '<option value="">（無賬號）</option>';
+  return AVATAR_ACCOUNTS.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>').join('');
+}
+async function loadAvatar(){
+  try{
+    await loadAvatarAccounts();
+    const r=await fetch('/api/avatar/stats'); const j=await r.json(); const st=j.stats||{};
+    $('avatarStats').innerHTML='<span class="stat-pill"><span class="sp-num">'+ (st.inbox||0) +'</span><span class="sp-lbl">待處理 inbox</span></span>'
+      +'<span class="stat-pill"><span class="sp-num">'+ (st.used||0) +'</span><span class="sp-lbl">已用 used</span></span>'
+      +'<span class="stat-pill"><span class="sp-num">'+ (st.total||0) +'</span><span class="sp-lbl">總計</span></span>';
+    const ib=$('avatarInbox'); if(ib) ib.innerHTML=(j.inbox||[]).map(f=>'<div class="src-item"><div class="si-name">'+esc(f)+'</div>'+
+      '<div class="si-actions" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+
+      '<button class="btn btn-sm btn-dark" onclick="markAvatarUsed(\''+esc(f)+'\')">標記已用</button>'+
+      '<select id="avsel_'+esc(f)+'" class="sel-sm">'+avatarAccountOptions()+'</select>'+
+      '<button class="btn btn-sm btn-primary" onclick="applyAvatarToAccount(\''+esc(f)+'\')">替換到賬號</button>'+
+      '</div></div>').join('') || '<div style="color:var(--text-3);font-size:12px;padding:8px 0;">inbox 暫無頭像，點上方「上傳頭像」或把圖片放入 data/avatars/inbox 即可</div>';
+  }catch(e){ const ib=$('avatarInbox'); if(ib) ib.innerHTML='<div style="color:var(--danger)">載入失敗：'+(e.message||e)+'</div>'; }
+}
+async function uploadAvatar(input){
+  const file=input.files&&input.files[0]; if(!file){ return; }
+  try{
+    const buf=await file.arrayBuffer();
+    const r=await fetch('/api/avatar/upload',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(file.name)},body:buf});
+    const j=await r.json();
+    showToast(j.ok?('已上傳 '+j.filename+'（'+(Math.round((j.size||0)/1024))+'KB）'):('上傳失敗：'+(j.error||'')), j.ok?'success':'error');
+  }catch(e){ showToast('上傳異常：'+(e.message||e),'error'); }
+  input.value=''; loadAvatar();
+}
+async function applyAvatarToAccount(fn){
+  const sel=document.getElementById('avsel_'+fn); const accountId=sel?sel.value:'';
+  if(!accountId){ showToast('請先選擇目標賬號','error'); return; }
+  showToast('正在替換 '+accountId+' 的頭像…','info');
+  try{
+    const r=await fetch('/api/avatar/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:fn,accountId:accountId})});
+    const j=await r.json();
+    if(j.ok){ showToast('頭像替換成功：'+accountId,'success'); }
+    else { showToast('替換失敗：'+(j.error||JSON.stringify(j.data||'')),'error'); }
+  }catch(e){ showToast('替換異常：'+(e.message||e),'error'); }
+  loadAvatar();
+}
+async function markAvatarUsed(fn){
+  const r=await fetch('/api/avatar/mark-used',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:fn})});
+  const j=await r.json(); showToast(j.ok?('已標記 '+fn):('失敗：'+(j.error||'')), j.ok?'success':'error'); loadAvatar();
+}
+
+/* ===================== 技能中心 ===================== */
+let _skills=[];
+async function loadSkills(){
+  try{
+    const r=await fetch('/api/skills'); const j=await r.json(); _skills=j.skills||[];
+    const tb=$('skillBody'); if(!tb) return;
+    tb.innerHTML=_skills.map((s,i)=>'<tr>'
+      +'<td>'+esc(s.name)+'</td>'
+      +'<td>'+esc(s.category)+'</td>'
+      +'<td style="color:var(--text-3)">'+esc(s.description||'')+'</td>'
+      +'<td>'+ (s.usageCount||0) +'</td>'
+      +'<td>'+(s.lastUsed?new Date(s.lastUsed).toLocaleString('zh-TW'):'-')+'</td>'
+      +'<td>'+(s.enabled?'<span style="color:var(--teal)">啟用</span>':'<span style="color:var(--danger)">停用</span>')+'</td>'
+      +'<td><button class="btn btn-sm btn-dark" onclick="toggleSkill('+i+')">'+(s.enabled?'停用':'啟用')+'</button> '
+      +'<button class="btn btn-sm btn-primary" '+(s.enabled?'':'disabled style="opacity:.5"')+' onclick="execSkill('+i+')">執行</button></td>'
+      +'</tr>').join('') || '<tr><td colspan="7" style="color:var(--text-3);padding:14px;">暫無技能</td></tr>';
+  }catch(e){ const tb=$('skillBody'); if(tb) tb.innerHTML='<tr><td colspan="7" style="color:var(--danger)">載入失敗</td></tr>'; }
+}
+async function toggleSkill(i){ const s=_skills[i]; if(!s) return; await fetch('/api/skills/'+s.id+'/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!s.enabled})}); loadSkills(); }
+async function execSkill(i){
+  const s=_skills[i]; if(!s) return;
+  if(!selectedAccounts.length){ showToast('請先在「帳號環境」勾選帳號','warn'); return; }
+  showToast('執行技能 '+s.taskType+' 於 '+selectedAccounts.length+' 個帳號...');
+  for(const acc of selectedAccounts){ try{ await fetch('/api/task/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:acc,type:s.taskType,params:{}})}); }catch(e){} }
+  showToast('技能執行完成','success'); loadSkills();
+}
+
+/* ===================== 記憶體 ===================== */
+let _shards=[];
+async function loadMemory(){
+  try{
+    const r=await fetch('/api/memory/shards'); const j=await r.json(); const shards=j.shards||[];
+    _shards=shards.map(s=>s.accountId);
+    const tb=$('shardBody'); if(tb) tb.innerHTML=shards.map((s,i)=>'<tr>'
+      +'<td>'+esc(s.accountId)+'</td>'
+      +'<td>'+esc(s.facts||'')+'</td>'
+      +'<td>'+esc(s.important||'')+'</td>'
+      +'<td>'+esc(s.recent||'')+'</td>'
+      +'<td>'+esc(s.relationships||'')+'</td>'
+      +'<td><button class="btn btn-sm btn-dark" onclick="viewShardIdx('+i+')">查看</button></td>'
+      +'</tr>').join('') || '<tr><td colspan="6" style="color:var(--text-3);padding:14px;">暫無記憶碎片</td></tr>';
+    const gk=$('globalKnowledge'); if(gk) gk.value=(j.global||'');
+  }catch(e){ const tb=$('shardBody'); if(tb) tb.innerHTML='<tr><td colspan="6" style="color:var(--danger)">載入失敗</td></tr>'; }
+}
+function viewShardIdx(i){ const id=_shards[i]; if(id) viewShard(encodeURIComponent(id)); }
+async function viewShard(encId){
+  const aid=decodeURIComponent(encId);
+  const r=await fetch('/api/memory/shard/'+encodeURIComponent(aid)); const j=await r.json();
+  alert('帳號 '+aid+' 的壓縮上下文（提供給 OpenClaw）：\n\n'+(j.context||''));
+}
+
+/* ===================== TopBar 全域操作 ===================== */
+async function importBatchPrompt(){
+  const txt=prompt('貼上帳號行，格式：備註,登入標識,類型(real/mock)\n例如：\n帳號A,61590344349141,real');
+  if(!txt) return; let n=0;
+  for(const line of txt.split('\n')){ const p=line.split(','); if(p.length<3) continue; await fetch('/api/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:p[0].trim(),accountId:p[1].trim(),mode:p[2].trim()==='real'?'real':'mock'})}); n++; }
+  showToast('已匯入 '+n+' 個帳號','success'); loadAccounts();
+}
+async function onAcctFile(e){
+  const input=e.target; const file=input.files[0]; if(!file){ return; }
+  const isXlsx=/\.xlsx?$/i.test(file.name);
+  if(isXlsx){
+    try{
+      const buf=await file.arrayBuffer(); const bytes=new Uint8Array(buf);
+      let bin=''; const chunk=0x8000;
+      for(let i=0;i<bytes.length;i+=chunk){ bin+=String.fromCharCode.apply(null, Array.prototype.slice.call(bytes.subarray(i,i+chunk))); }
+      const b64=btoa(bin);
+      showToast('正在解析 xlsx 並匯入帳號（生成指紋+順序分配代理）...');
+      const r=await fetch('/api/accounts/import-xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileB64:b64, filename:file.name})});
+      const j=await r.json();
+      if(j&&j.success){ let msg='已匯入 '+j.created+' 個帳號'; if(j.skipped) msg+='，跳過 '+j.skipped; msg+=' ｜ 指紋 '+j.fingerprinted+' ｜ Cookie還原 '+j.cookieRestored+' ｜ 代理分配 '+j.proxyAssigned; showToast(msg,'success'); }
+      else showToast('匯入失敗：'+(j&&j.error||'未知錯誤'),'error');
+      loadAccounts();
+    }catch(e){ showToast('匯入失敗：'+(e.message||e),'error'); }
+    input.value=''; return;
+  }
+  const rd=new FileReader();
+  rd.onload=async function(){
+    const text=rd.result; if(!text) return;
+    const lines=String(text).split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+    let n=0, skip=0;
+    for(const line of lines){
+      if(/^(備註|名稱|帳號|name|email|account)/i.test(line)) continue;
+      const p=line.split(/[,，\t]/); if(p.length<2){ skip++; continue; }
+      const name=p[0].trim(); const accountId=p[1].trim(); if(!accountId){ skip++; continue; }
+      const mode=(p[2]&&/real/i.test(p[2].trim()))?'real':'mock';
+      try{ const r=await fetch('/api/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,accountId:accountId,mode:mode})}); const j=await r.json(); if(j&&j.success) n++; else skip++; }catch(e){ skip++; }
+    }
+    showToast('已匯入 '+n+' 個帳號'+(skip?('，跳過 '+skip):''),'success'); loadAccounts();
+  };
+  rd.readAsText(file); input.value='';
+}
+async function bindProxyAll(){ autoAssignProxy(); }
+async function detectAccounts(){ showToast('正在檢測全部帳號狀態...'); for(const a of allAccounts){ if(abortFlag){ showToast('已終止','warn'); break; } try{ await runTask('sync',{},a.accountId); }catch(e){} } loadAccounts(); if(!abortFlag) showToast('檢測完成','success'); }
+function aiRunAll(){ runAllSmart(); }
+async function retileWindows(){ try{ const r=await fetch('/api/windows/retile',{method:'POST'}); const j=await r.json(); showToast(j.success?'視窗已重新排布':'重排失敗', j.success?'success':'error'); }catch(e){ showToast('重排失敗','error'); } }
+async function toggleAutoRetile(){ try{ const r=await fetch('/api/windows/auto-retile',{method:'GET'}); const j=await r.json(); const enabled=!(j.enabled||false); await fetch('/api/windows/auto-retile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})}); const b=$('btnAutoRetile'); if(b) b.innerText='🔁 自動重排：'+(enabled?'開':'關'); showToast(enabled?'已開啟自動重排':'已關閉自動重排', enabled?'success':'info'); }catch(e){ showToast('自動重排切換失敗','error'); } }
+async function demoStart(){ const ids=selectedAccounts.slice(0,6); if(!ids.length){ showToast('請先勾選至少 1 個帳號','warn'); return; } const r=await fetch('/api/demo/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountIds:ids})}); const j=await r.json(); showToast(j.success?('已開始示范錄制：'+(j.recording&&j.recording.length)+' 個視窗'):'啟動失敗', j.success?'success':'error'); }
+async function demoStop(){ const ids=selectedAccounts.slice(0,6); if(!ids.length){ showToast('請勾選要停止的帳號','warn'); return; } const r=await fetch('/api/demo/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountIds:ids})}); const j=await r.json(); showToast(j.success?('已停止錄制：'+(j.stopped&&j.stopped.length)+' 個帳號'):'停止失敗', j.success?'success':'error'); }
+
+/* ---------- 運行日誌（對齊舊 UI 的 right-log + pollLogs） ---------- */
+let _logTimer = null;
+function fmtLogTime(t){ if(!t) return ''; try { return new Date(t).toLocaleTimeString('zh-TW'); } catch(e){ return String(t); } }
+async function pollLogs(manual){
+  try {
+    const r = await fetch('/api/logs'); const j = await r.json();
+    const box = $('logBox'); if(!box) return;
+    const logs = (j.logs || []).slice().reverse();
+    box.innerHTML = logs.length ? logs.map(function(l){
+      const lv = 'lv-' + (l.level || 'info');
+      const head = (l.level ? ('[' + esc(l.level) + '] ') : '') + (l.module ? ('[' + esc(l.module) + '] ') : '');
+      return '<div class="log-line ' + lv + '"><span class="lt">[' + esc(fmtLogTime(l.time)) + ']</span> ' + esc(head + (l.message || '')) + '</div>';
+    }).join('') : '<div class="log-line">尚無日誌</div>';
+    box.scrollTop = box.scrollHeight;
+  } catch(e){ if(manual) showToast('日誌拉取失敗','error'); }
+}
+function openLogFloat(){
+  closeDemoFloat();
+  const el = $('logFloat'); if(!el) return;
+  el.classList.add('open');
+  const b = $('btnLog'); if(b) b.classList.add('active');
+  if(!_logTimer) _logTimer = setInterval(function(){ pollLogs(false); }, 2500);
+  pollLogs(true);
+}
+function closeLogFloat(){
+  const el = $('logFloat'); if(el) el.classList.remove('open');
+  const b = $('btnLog'); if(b) b.classList.remove('active');
+  if(_logTimer){ clearInterval(_logTimer); _logTimer = null; }
+}
+
+/* ---------- 錄制步驟（對齊舊 UI 的 viewDemoSteps） ---------- */
+async function viewDemoSteps(){
+  if(!selectedAccounts.length){ showToast('請先在「帳號環境」勾選 1 個帳號','warn'); return; }
+  const id = selectedAccounts[0];
+  const box = $('demoBox'); if(box) box.innerHTML = '讀取中…';
+  try {
+    const r = await fetch('/api/demo/events?accountId=' + encodeURIComponent(id));
+    const j = await r.json();
+    if(!j.success){ showToast('讀取失敗：' + (j.error || ''),'error'); if(box) box.innerHTML = '讀取失敗'; return; }
+    const ev = (j.events || []);
+    if(!ev.length){ if(box) box.innerHTML = '<div class="step-item">該帳號尚無錄制步驟。可先點「⏺ 示范錄制」錄制操作。</div>'; return; }
+    if(box) box.innerHTML = ev.map(function(e){
+      const elInfo = e.el || {}; const act = (elInfo.aria || elInfo.text || elInfo.tag || '');
+      const val = elInfo.val ? (' = ' + elInfo.val) : '';
+      return '<div class="step-item"><span class="st">[' + esc(e.t || '') + ']</span> ' + (act ? (esc(act) + esc(val)) : '') + ' <span class="st">@ ' + esc(e.url || '') + '</span></div>';
+    }).join('');
+    showToast('已載入 ' + ev.length + ' 個錄制步驟','success');
+  } catch(e){ showToast('讀取失敗','error'); if(box) box.innerHTML = '讀取失敗'; }
+}
+function openDemoFloat(){ closeLogFloat(); const el = $('demoFloat'); if(!el) return; el.classList.add('open'); viewDemoSteps(); }
+function closeDemoFloat(){ const el = $('demoFloat'); if(el) el.classList.remove('open'); }
+
+/* ===================== 初始化 ===================== */
+(async function init(){
+  updateTime();
+  try{ const h=await (await fetch('/api/health')).json(); document.title='Aike-FBclaw ｜ '+(h.mock?'Mock':'真實 FB'); }catch(e){}
+  loadAccounts();
+  startMonitorPoll();
+  try{ const r=await fetch('/api/windows/auto-retile'); const j=await r.json(); const b=$('btnAutoRetile'); if(b) b.innerText='🔁 自動重排：'+(j.enabled?'開':'關'); }catch(e){}
+})();
+
+</script>
+
+<!-- ===== Aike-FBclaw 系統日誌浮動面板（Electron 桌面殼專用） ===== -->
+<style>
+#fbclawLogBtn{position:fixed;right:14px;bottom:14px;z-index:99990;background:#1b2a6b;color:#dfe8ff;border:1px solid #3a52b0;
+  border-radius:20px;padding:8px 14px;font:600 13px system-ui,'Microsoft YaHei',sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+#fbclawLogBtn:hover{background:#243a8f}
+#fbclawLogPanel{position:fixed;right:14px;bottom:60px;width:440px;max-height:60vh;z-index:99991;background:#0b1437;
+  border:1px solid #2a3b78;border-radius:12px;display:none;flex-direction:column;overflow:hidden;
+  box-shadow:0 10px 40px rgba(0,0,0,.5);font:12px/1.5 ui-monospace,Consolas,monospace;color:#cfe0ff}
+#fbclawLogPanel .hd{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#13205a;color:#fff;font-weight:600}
+#fbclawLogPanel .hd button{margin-left:auto;background:#23407f;color:#dfe8ff;border:0;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px}
+#fbclawLogPanel .hd button:hover{background:#2c4f9c}
+#fbclawLogPanel .body{overflow:auto;padding:8px 10px;flex:1}
+#fbclawLogPanel .ln{white-space:pre-wrap;word-break:break-all;padding:1px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+#fbclawLogPanel .ln .src{color:#7fa0ff;margin-right:6px}
+#fbclawLogPanel .ln.error{color:#ff9a9a}
+#fbclawLogPanel .ln.warn{color:#ffd27f}
+#fbclawLogPanel .empty{opacity:.6;padding:12px}
+</style>
+<div id="fbclawLogBtn">🖥️ 系統日誌</div>
+<div id="fbclawLogPanel">
+  <div class="hd"><span>系統日誌（後台服務）</span><button id="fbclawLogRestart">重啟服務</button></div>
+  <div class="body" id="fbclawLogBody"><div class="empty">（網頁模式不顯示後台日誌；請用桌面軟體開啟）</div></div>
+</div>
+<script>
+(function(){
+  var btn=document.getElementById('fbclawLogBtn'),panel=document.getElementById('fbclawLogPanel'),
+      body=document.getElementById('fbclawLogBody'),restart=document.getElementById('fbclawLogRestart');
+  if(!window.fbclaw||!window.fbclaw.console){return;} // 非 Electron 環境：安全跳過
+  var open=false,lines=[],MAX=800,unsub=null;
+  btn.onclick=function(){
+    open=!open;panel.style.display=open?'flex':'none';
+    if(open){ body.innerHTML=''; lines=[];
+      window.fbclaw.console.getRecent().then(function(arr){ (arr||[]).forEach(addLine); });
+      if(!unsub){ unsub=window.fbclaw.console.onLog(addLine); }
+    }
+  };
+  restart.onclick=function(){ window.fbclaw.server.restart(); addLine({source:'main',level:'info',line:'已請求重啟後台服務'}); };
+  function addLine(e){
+    if(typeof e==='string') e={source:'?',level:'info',line:e};
+    lines.push(e); if(lines.length>MAX) lines.shift();
+    if(!open) return;
+    var d=document.createElement('div'); d.className='ln '+(e.level||'');
+    var t=new Date(e.t||Date.now()); var ts=('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)+':'+('0'+t.getSeconds()).slice(-2);
+    d.innerHTML='<span class="src">['+ts+' '+(e.source||'?')+']</span>'+escapeHtml(e.line||'');
+    body.appendChild(d); body.scrollTop=body.scrollHeight;
+  }
+  function escapeHtml(s){return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
+})();
+</script>
+
+</body>
+</html>

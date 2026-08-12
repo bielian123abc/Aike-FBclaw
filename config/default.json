@@ -1,0 +1,71 @@
+{
+  "app": {
+    "name": "Aike-FBclaw",
+    "version": "1.0.0",
+    "language": "zh-TW"
+  },
+  "ai": {
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "baseUrl": "https://api.deepseek.com/v1",
+    "maxTokens": 4096,
+    "temperature": 0.7
+  },
+  "adspower": {
+    "baseUrl": "http://local.adspower.net:50325",
+    "apiPort": 50325,
+    "apiKey": ""
+  },
+  "proxy": {
+    "clashApiUrl": "",
+    "defaultCountry": "TW",
+    "preferTaiwanIp": true
+  },
+  "browser": {
+    "language": "zh-TW",
+    "timezone": "Asia/Taipei",
+    "locale": "zh-TW",
+    "maxConcurrentWindows": 10,
+    "autoArrangeWindows": true
+  },
+  "strategy": {
+    "maxFriendsPerDay": 5,
+    "maxLikesPerDay": 10,
+    "maxSharesPerDay": 3,
+    "maxMessagesPerDay": 10,
+    "maxGroupJoinsPerDay": 3,
+    "minDelayBetweenActions": 30,
+    "maxDelayBetweenActions": 120,
+    "activeHoursStart": 7,
+    "activeHoursEnd": 23
+  },
+  "mainPages": [],
+  "mainGroups": [],
+  "taiwanKeywords": [
+    "台灣",
+    "台北",
+    "台中",
+    "高雄",
+    "台南",
+    "新北",
+    "桃園",
+    "新竹",
+    "彰化",
+    "嘉義",
+    "台灣旅遊",
+    "台灣美食",
+    "台灣生活",
+    "台灣新聞",
+    "台灣二手",
+    "台灣團購",
+    "台灣創業",
+    "台灣電商",
+    "台灣代購",
+    "台灣交友",
+    "台灣工作",
+    "台灣房屋",
+    "台灣股市",
+    "台灣留學",
+    "台灣文化"
+  ]
+}

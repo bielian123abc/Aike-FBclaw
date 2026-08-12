@@ -1,0 +1,23 @@
+# 依賴與建置產物（體積大，不進版本控制；仍由 electron-builder 打包進安裝包）
+node_modules/
+dist/
+release/
+
+# 運行時資料、日誌、密鑰
+data/
+logs/
+*.log
+.env
+
+# 隨包附的 node 運行時
+node-runtime/
+
+# 系統/編輯器
+.DS_Store
+Thumbs.db
+*.swp
+
+# agent 自我修復的臨時探針
+_probe.ts
+_probe2.ts
+_selftest.txt

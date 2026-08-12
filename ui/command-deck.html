@@ -428,6 +428,23 @@ body {
 .chat-input:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(37,99,255,.09); }
 .supervise-bar { display:flex; gap:8px; margin-top:12px; }
 
+/* ============ OpenClaw 終端 ============ */
+.term-out { flex:1; overflow-y:auto; background:#0b0f1a; border:1px solid var(--border); border-radius:14px;
+  padding:14px 16px; font-family:var(--font-mono); font-size:12.5px; line-height:1.65; display:flex; flex-direction:column; gap:3px; }
+.term-out::-webkit-scrollbar { width:6px; }
+.term-out::-webkit-scrollbar-thumb { background:rgba(120,140,200,.25); border-radius:3px; }
+.term-line { white-space:pre-wrap; word-break:break-word; }
+.term-line.sys { color:#6b7a99; }
+.term-line.user { color:#7dd3fc; }
+.term-line.user::before { content:"❯ "; color:#38bdf8; }
+.term-line.ai { color:#e6edf7; }
+.term-line.tool { color:#fbbf24; }
+.term-line.tool::before { content:"⚙ "; }
+.term-line.err { color:#f87171; }
+.term-line.ok { color:#34d399; }
+.term-step { color:#c4b5fd; font-size:11.5px; padding-left:10px; border-left:2px solid rgba(124,58,237,.4); margin:2px 0; }
+
+
 /* ============ 徽章 ============ */
 .badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px;
   font-size:10px; font-weight:800; font-family:var(--font-mono); border:1px solid transparent; }
@@ -593,6 +610,7 @@ code { background:var(--bg-input); border:1px solid var(--border); border-radius
       <div class="nav-item" data-page="avatar"><span class="nav-icon">🖼️</span> 頭像管理<span class="nav-num">11</span></div>
       <div class="nav-item" data-page="skills"><span class="nav-icon">🎓</span> 技能中心<span class="nav-num">12</span></div>
       <div class="nav-item" data-page="memory"><span class="nav-icon">💾</span> 記憶體<span class="nav-num">13</span></div>
+      <div class="nav-item" data-page="openclaw"><span class="nav-icon">🦞</span> OpenClaw 終端<span class="nav-num">14</span></div>
     </nav>
     <div class="sidebar-footer"><span class="status-dot"></span> Gateway · Online</div>
   </aside>
@@ -1018,6 +1036,34 @@ code { background:var(--bg-input); border:1px solid var(--border); border-radius
         </div>
       </div>
 
+      <!-- ============ OpenClaw 終端（原始模式 + 進化記憶） ============ -->
+      <div class="page" id="page-openclaw">
+        <div class="glass-card" style="height:calc(100vh - 56px - 44px - 80px);display:flex;flex-direction:column;">
+          <div class="card-title" style="flex-shrink:0;">
+            <span class="title-icon">🦞</span> OpenClaw 終端
+            <span class="title-badge" id="termModeBadge">智能體模式</span>
+            <div style="margin-left:auto;display:flex;gap:8px;">
+              <button class="btn btn-sm" id="btnModeSmart" onclick="setTermMode('smart')">🧠 智能體模式</button>
+              <button class="btn btn-sm" id="btnModeRaw" onclick="setTermMode('raw')">⚡ 原始模式</button>
+              <button class="btn btn-sm btn-dark" onclick="loadTerminalMemory()">🧬 進化記憶</button>
+              <button class="btn btn-sm btn-dark" onclick="clearTerm()">🧹 清空</button>
+            </div>
+          </div>
+          <div class="chat-shell">
+            <div class="term-out" id="termOut">
+              <div class="term-line sys">OpenClaw 終端已就緒。這是智能體的「身體控制檯」：</div>
+              <div class="term-line sys">• 智能體模式：走 /api/chat，智能體可呼叫 FB 工具與程式碼/自我修復工具，並顯示每步執行紀錄。</div>
+              <div class="term-line sys">• 原始模式：直連底層 OpenClaw 智能體（/api/agent/raw），不經工具包裝，存取原生生態。</div>
+              <div class="term-line sys">下方輸入即可對話；可要求它 remember 經驗、evolve_skill 進化技能、read_file/edit_file 修復軟體。</div>
+            </div>
+            <div class="chat-bar">
+              <input class="chat-input" type="text" placeholder="對 OpenClaw 智能體說話，或下指令…" id="termInput" onkeydown="if(event.key==='Enter')sendTerminal()">
+              <button class="btn btn-primary btn-sm" onclick="sendTerminal()">發送 ▶</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ============ 代理池 ============ -->
       <div class="page" id="page-proxy">
         <div class="glass-card">
@@ -1300,7 +1346,8 @@ const titleMap = {
   monitor:['全域監控','/ monitor'], account:['帳號環境管理','/ account'], proxy:['代理池管理','/ proxy'],
   task:['任務編排編輯器','/ task'], policy:['運營策略配置','/ policy'], source:['社團數據源','/ source'],
   clawchat:['OpenClaw AI 對話','/ clawchat'], report:['歷史任務報告','/ report'], server:['伺服器 & 模型','/ server'],
-  groups:['社團總覽','/ groups'], avatar:['頭像管理','/ avatar'], skills:['技能中心','/ skills'], memory:['記憶體','/ memory']
+  groups:['社團總覽','/ groups'], avatar:['頭像管理','/ avatar'], skills:['技能中心','/ skills'], memory:['記憶體','/ memory'],
+  openclaw:['OpenClaw 終端','/ openclaw']
 };
 navItems.forEach(item => item.addEventListener('click', () => {
   navItems.forEach(n => n.classList.remove('active')); item.classList.add('active');
@@ -1319,6 +1366,7 @@ navItems.forEach(item => item.addEventListener('click', () => {
   if(p==='server') loadServer();
   if(p==='groups') loadGroups();
   if(p==='avatar') loadAvatar();
+  if(p==='openclaw') loadTerminal();
 }));
 
 /* 功能 chips（任務編排）選中切換 */
@@ -1628,6 +1676,53 @@ async function genSupervise(){
   msgs.scrollTop=msgs.scrollHeight;
 }
 $('chatInput') && $('chatInput').addEventListener('keydown', e=>{ if(e.key==='Enter') sendChat(); });
+
+/* ===================== OpenClaw 終端 ===================== */
+let termMode = 'smart';
+function termAppend(cls, text){ const o=$('termOut'); if(!o) return; const d=document.createElement('div'); d.className='term-line '+cls; d.textContent=text; o.appendChild(d); o.scrollTop=o.scrollHeight; }
+function setTermMode(m){
+  termMode = m;
+  const badge=$('termModeBadge'); if(badge) badge.textContent = (m==='raw'?'原始模式':'智能體模式');
+  $('btnModeSmart') && $('btnModeSmart').classList.toggle('btn-violet', m==='smart');
+  $('btnModeRaw') && $('btnModeRaw').classList.toggle('btn-violet', m==='raw');
+  termAppend('sys','— 切換至 '+(m==='raw'?'原始模式（直連底層 OpenClaw）':'智能體模式（工具調度迴圈）')+' —');
+}
+function loadTerminal(){ setTermMode(termMode); }
+function clearTerm(){ const o=$('termOut'); if(o) o.innerHTML=''; termAppend('sys','終端已清空。'); }
+async function sendTerminal(){
+  const inp=$('termInput'); if(!inp) return;
+  const txt=inp.value.trim(); if(!txt) return;
+  termAppend('user', txt); inp.value='';
+  const acc=currentAccount || (allAccounts[0]&&allAccounts[0].accountId);
+  if(!acc){ termAppend('err','⚠ 請先匯入並選擇帳號（FB 工具需要 accountId）'); return; }
+  try{
+    if(termMode==='raw'){
+      termAppend('sys','⚡ 原始模式 → POST /api/agent/raw');
+      const r=await fetch('/api/agent/raw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:txt})});
+      const j=await r.json();
+      if(j.reply==null) termAppend('err','（OpenClaw 無回應，網關可能離線或金鑰失效）');
+      else termAppend('ai', j.reply);
+    } else {
+      termAppend('sys','🧠 智能體模式 → POST /api/chat');
+      const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:acc,message:txt})});
+      const j=await r.json();
+      if(j.usedTools && Array.isArray(j.steps)){
+        j.steps.forEach(s=>{ termAppend('tool', '呼叫 '+s.tool+(s.result?(' → '+s.result):'')); });
+      }
+      termAppend('ai', j.reply || '（無回覆）');
+    }
+  }catch(e){ termAppend('err','對話失敗：'+(e.message||e)); }
+}
+async function loadTerminalMemory(){
+  try{
+    const r=await fetch('/api/agent/memory',{method:'GET'});
+    const j=await r.json();
+    termAppend('sys','🧬 進化記憶 — 經驗筆記：');
+    (j.notes&&j.notes.length) ? j.notes.forEach(n=>termAppend('ok','• '+n.key+'：'+n.value)) : termAppend('sys','（尚無筆記，可要求智能體 remember）');
+    termAppend('sys','🧬 已進化技能：');
+    (j.skills&&j.skills.length) ? j.skills.forEach(s=>termAppend('ok','• skill:'+s.name+'：'+s.description)) : termAppend('sys','（尚無技能，可要求智能體 evolve_skill）');
+  }catch(e){ termAppend('err','讀取記憶失敗：'+(e.message||e)); }
+}
 
 /* ===================== 全域監控 ===================== */
 let monitorTimer=null;

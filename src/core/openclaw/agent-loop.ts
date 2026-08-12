@@ -17,6 +17,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, spawn } from 'child_process';
 import { APP_ROOT, LOG_DIR } from '../../config';
+import {
+  appendChat, getChatHistory, putNote, getAllNotes, saveSkill, getSkill, listSkills,
+  type EvolvedSkill,
+} from './agent-memory';
 
 export interface AgentStep {
   tool: string;
@@ -181,7 +185,79 @@ const TOOLS: Record<string, { desc: string; run: (p: any) => Promise<string> }> 
   git_diff: { desc: '查看待審核 diff', run: toolGitDiff },
   read_logs: { desc: '讀取軟體日誌', run: toolReadLogs },
   restart_service: { desc: '請求重啟服務', run: toolRestartService },
+  // 記憶進化
+  remember: {
+    desc: '把一條知識/經驗寫入持久記憶（跨會話保留，這是「進化」的基底）',
+    run: async (p) => {
+      const key = String(p.key || p.note || '').trim();
+      const value = String(p.value || p.content || p.text || '').trim();
+      if (!key) return 'remember 需要 key（記憶鍵名）';
+      putNote(key, value);
+      return `已寫入持久記憶【${key}】：${value.slice(0, 200)}`;
+    },
+  },
+  recall: {
+    desc: '讀取持久記憶：傳 key 讀單條，不傳則列出全部（用來檢視自己累積的經驗）',
+    run: async (p) => {
+      if (p && p.key) {
+        const v = getNote(String(p.key));
+        return v ? `【${p.key}】${v}` : `尚無此記憶：${p.key}`;
+      }
+      const all = getAllNotes();
+      return all.length ? all.map((n) => `- ${n.key}：${n.value}`).join('\n') : '尚無持久記憶，可用 remember 建立。';
+    },
+  },
+  list_skills: {
+    desc: '列出已進化出的技能（由你創造的複合流程）',
+    run: async () => {
+      const s = listSkills();
+      return s.length ? s.map((x) => `- ${x.name}：${x.description}`).join('\n') : '尚無進化技能，可用 evolve_skill 創造。';
+    },
+  },
+  evolve_skill: {
+    desc: '創造/進化一個新技能：由現有 FB 或程式碼工具組成的流程，寫入後即可用 skill:<名> 呼叫',
+    run: async (p) => {
+      const name = String(p.name || '').trim();
+      if (!name) return 'evolve_skill 需要 name';
+      if (!Array.isArray(p.steps) || !p.steps.length) return 'evolve_skill 需要 steps 陣列（每個元素含 tool 與可選 params）';
+      const def: EvolvedSkill = {
+        name,
+        description: String(p.description || `進化技能 ${name}`),
+        steps: p.steps,
+      };
+      saveSkill(def);
+      TOOLS['skill:' + name] = makeSkillTool(def);
+      return `✅ 已進化出新技能「${name}」（${def.steps.length} 步）。今後對話中可直接呼叫 skill:${name}。`;
+    },
+  },
 };
+
+// ---------------- 進化技能：把「現有工具組成的流程」包成可呼叫工具 ----------------
+function makeSkillTool(def: EvolvedSkill): { desc: string; run: (p: any) => Promise<string> } {
+  return {
+    desc: def.description || `進化技能 ${def.name}`,
+    run: async (p: any) => {
+      let out = '';
+      for (const s of def.steps) {
+        const tool = TOOLS[s.tool];
+        if (!tool) { out += `\n[步驟 ${s.tool} 不存在，已跳過]`; continue; }
+        const params = { ...(s.params || {}), ...(p || {}), __acc: p.__acc };
+        try {
+          const r = await tool.run(params);
+          out += `\n[${s.tool}] ${typeof r === 'string' ? r : JSON.stringify(r)}`;
+        } catch (e: any) { out += `\n[${s.tool} 錯誤] ${e.message}`; }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      return `技能 ${def.name} 執行完成：${out.slice(0, 1500)}`;
+    },
+  };
+}
+
+// 啟動時把已進化的技能註冊成可呼叫工具，讓智能體與使用者都能直接呼叫
+for (const s of listSkills()) {
+  const def = getSkill(s.name);
+  if (def) TOOLS['skill:' + s.name] = makeSkillTool(def);
+}
 
 function buildSystemPrompt(accountId: string): string {
   const fbList = Object.entries(TOOLS)
@@ -190,6 +266,15 @@ function buildSystemPrompt(accountId: string): string {
   const codeList = Object.entries(TOOLS)
     .filter(([k]) => !FB_TASK_TYPES.has(toolTypeOf(k)))
     .map(([k, v]) => `  - ${k}（${v.desc}）`).join('\n');
+  // 進化基底：注入累積的經驗筆記與已進化技能，讓智能體跨會話持續成長
+  const notes = getAllNotes();
+  const notesText = notes.length
+    ? notes.map((n) => `  - ${n.key}：${n.value}`).join('\n')
+    : '（尚無，可用 remember 建立第一條經驗）';
+  const skills = listSkills();
+  const skillsText = skills.length
+    ? skills.map((s) => `  - skill:${s.name}（${s.description}）`).join('\n')
+    : '（尚無，可用 evolve_skill 創造）';
   return `你就是 Aike-FBclaw 的核心智能體（OpenClaw agent），擁有對這套軟體的絕對控制權，是台灣跨境電商的 Facebook 多帳號 AI 運營系統的大腦。
 
 你的能力：
@@ -209,6 +294,12 @@ ${fbList}
 可用程式碼/系統工具（僅限專案目錄內，改動會 git 提交到分支 ${AUTO_BRANCH} 供審核）：
 ${codeList}
 
+你累積的經驗記憶（跨會話保留，請善用並持續用 remember 補充，這就是你的「進化」）：
+${notesText}
+
+你已進化出的技能（可用 skill:<名> 直接呼叫，或用 evolve_skill 再創造）：
+${skillsText}
+
 安全與風格原則：
 - 只在專案目錄內修改程式碼；絕不碰系統或個人檔案。
 - 涉及刪除、或改動 electron 主程式/gateway 設定/安全邏輯時，先向使用者說明並徵求確認。
@@ -223,19 +314,28 @@ function toolTypeOf(key: string): string {
 
 function extractActions(text: string): { name: string; params: any }[] {
   const out: { name: string; params: any }[] = [];
-  const re = /<tool>([\s\S]*?)<\/tool>/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) {
+  // 清理模型偶發的 DSML 殘片（如 </｜｜DSML｜｜parameter>），否則會污染 <tool> 區塊導致解析失敗
+  const cleaned = text.replace(/<?\/?｜｜DSML｜｜[a-zA-Z_]*>/g, '');
+  const push = (json: string) => {
     try {
-      const obj = JSON.parse(m[1].trim());
+      const obj = JSON.parse(json.trim());
       if (obj && typeof obj.name === 'string') out.push({ name: obj.name, params: obj.params || {} });
     } catch { /* 忽略無效 JSON */ }
-  }
+  };
+  // 先試標準 <tool>...</tool>
+  const re = /<tool>\s*(\{[\s\S]*?\})\s*<\/tool>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(cleaned))) push(m[1]);
+  if (out.length) return out;
+  // 退化：模型漏寫 </tool> 或夾雜殘片時，抓 <tool>{...} 直到下一個 <tool> 或結尾
+  const re2 = /<tool>\s*(\{[\s\S]*?\})\s*(?=<\/?tool>|$)/g;
+  while ((m = re2.exec(cleaned))) push(m[1]);
   return out;
 }
 
 function cleanReply(text: string): string {
-  return text.replace(/<tool>[\s\S]*?<\/tool>/g, '').trim();
+  const cleaned = text.replace(/<?\/?｜｜DSML｜｜[a-zA-Z_]*>/g, '');
+  return cleaned.replace(/<tool>[\s\S]*?(<\/tool>|$)/g, '').trim();
 }
 
 /**
@@ -244,6 +344,13 @@ function cleanReply(text: string): string {
  */
 export async function runAgentChat(accountId: string, message: string, history?: string): Promise<AgentChatResult> {
   const claw = getOpenClaw();
+  const scope = 'chat:' + accountId;
+  // 跨會話持久歷史優先；UI 傳來的 in-memory 歷史作為補充（避免重複時以持久為準）
+  const persisted = getChatHistory(scope, 30);
+  const ctxText = [persisted, history].filter(Boolean).join('\n');
+  // 先記下使用者這一輪
+  appendChat(scope, 'user', message);
+
   let conversation = message;
   let lastReply = '';
   const steps: AgentStep[] = [];
@@ -251,10 +358,11 @@ export async function runAgentChat(accountId: string, message: string, history?:
 
   for (let iter = 0; iter < 5; iter++) {
     const system = buildSystemPrompt(accountId);
-    const ctx = history ? `## 對話歷史\n${history}\n\n` : '';
+    const ctx = ctxText ? `## 對話歷史（含跨會話記憶）\n${ctxText}\n\n` : '';
     const fullMsg = ctx + `## 用戶訊息\n${conversation}`;
     const reply = await claw.chat(system, fullMsg, 800);
     if (!reply) {
+      appendChat(scope, 'agent', '（OpenClaw 無回應）');
       return {
         reply: 'OpenClaw 暫時無回應（網關可能離線或金鑰失效），請檢查 OpenClaw 設定或稍後再試。',
         steps,
@@ -264,7 +372,9 @@ export async function runAgentChat(accountId: string, message: string, history?:
     lastReply = reply;
     const actions = extractActions(reply);
     if (actions.length === 0) {
-      return { reply: cleanReply(reply), steps, usedTools };
+      const finalReply = cleanReply(reply);
+      appendChat(scope, 'agent', finalReply);
+      return { reply: finalReply, steps, usedTools };
     }
     usedTools = true;
     let observation = '';
@@ -285,5 +395,7 @@ export async function runAgentChat(accountId: string, message: string, history?:
     }
     conversation = `你剛才的回覆觸發了工具執行，以下是執行結果，請用自然語言向使用者總結（不要重複工具原始輸出，只需說做了什麼、結果如何）：\n${observation}`;
   }
-  return { reply: cleanReply(lastReply) || '（已執行工具，但未能生成總結）', steps, usedTools };
+  const finalReply = cleanReply(lastReply) || '（已執行工具，但未能生成總結）';
+  appendChat(scope, 'agent', finalReply);
+  return { reply: finalReply, steps, usedTools };
 }

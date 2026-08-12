@@ -30,6 +30,8 @@ import { fingerprintFilePath } from './core/browser/fingerprint';
 import { runTask, ensureSession, listContent, saveContent, loadContent, deleteContent, closeAllSessions, getMemory } from './core/engine/task-runner';
 import { parseIntent, parseIntentWithLLM } from './core/engine/intent-parser';
 import { runAgentChat } from './core/openclaw/agent-loop';
+import { runOpenClawAgent } from './core/openclaw/engine';
+import { getAllNotes, listSkills } from './core/openclaw/agent-memory';
 import { generatePostContent } from './core/provider/ai-provider';
 import { closeSession, getSession, screenshot, persistSession, getActiveSessionCount, detectExitIp, launchSession, attachDemoToSession } from './core/browser/session-manager';
 import { isRecording, setRecording, getEvents, clearEvents, flush } from './core/browser/demo-recorder';
@@ -465,6 +467,19 @@ async function route(url: URL, method: string, body: any): Promise<any> {
   // OpenClaw Agent：健康狀態（LLM 可達 / 最後調用 / 錯誤率 / 自動監管開關）
   if (p === '/api/agent/health' && method === 'GET') {
     return { success: true, health: getAgentHealth(), lastReport: getLatestSuperviseReport() };
+  }
+
+  // OpenClaw Agent：原始模式 — 直連底層 OpenClaw 智能體（不經工具包裝，存取原生生態）
+  if (p === '/api/agent/raw' && method === 'POST') {
+    const { message } = body;
+    if (!message) throw new Error('缺少 message');
+    const reply = await runOpenClawAgent(message);
+    return { success: true, raw: true, reply: reply ?? null, reachable: reply !== null };
+  }
+
+  // OpenClaw Agent：進化記憶檢視（經驗筆記 + 已進化技能）
+  if (p === '/api/agent/memory' && method === 'GET') {
+    return { success: true, notes: getAllNotes(), skills: listSkills() };
   }
 
   // 全局監控快照

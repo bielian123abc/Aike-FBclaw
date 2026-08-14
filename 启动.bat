@@ -3,7 +3,8 @@ title Aike-FBclaw
 cd /d "G:\Aike-FBclaw"
 set "NODE=C:\Users\UR\.workbuddy\binaries\node\versions\22.22.2\node.exe"
 set "NPX=C:\Users\UR\.workbuddy\binaries\node\versions\22.22.2\npx.cmd"
-set "DEEPSEEK_API_KEY=YOUR_DEEPSEEK_API_KEY"
+REM 填入你的 DeepSeek API Key（请勿提交真实 key 到 git；建议改用系统环境变量 DEEPSEEK_API_KEY）
+set "DEEPSEEK_API_KEY=在此填入你的_DeepSeek_API_Key"
 
 echo Starting OpenClaw Gateway...
 start "OpenClaw-Gateway" %NPX% openclaw gateway

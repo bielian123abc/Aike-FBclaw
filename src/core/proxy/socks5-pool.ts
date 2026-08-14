@@ -22,8 +22,7 @@ interface ProxyEntry {
 
 export class Socks5Forward {
   private server: net.Server | null = null;
-  private fromSocket: net.Socket | null = null;
-  private toSocket: net.Socket | null = null;
+  private sockets = new Set<net.Socket>();
 
   constructor(
     private localPort: number,
@@ -38,7 +37,11 @@ export class Socks5Forward {
       this.server = net.createServer((local) => {
         this.handleConn(local).catch(() => local.destroy());
       });
-      this.server.on('error', reject);
+      this.server.on('error', (err) => {
+        // 啟動階段 reject；運行階段記錄但不崩潰
+        if (!this.server?.listening) reject(err);
+        else console.warn(`[Socks5Forward] server error port=${this.localPort}: ${err.message}`);
+      });
       this.server.listen(this.localPort, '127.0.0.1', () => {
         const addr = this.server!.address() as net.AddressInfo;
         resolve(addr.port);
@@ -47,13 +50,30 @@ export class Socks5Forward {
   }
 
   stop() {
+    // 關閉所有活躍連線，避免舊帳號瀏覽器仍連到已停用的本地端口
+    for (const sock of this.sockets) {
+      try { sock.destroy(); } catch {}
+    }
+    this.sockets.clear();
     this.server?.close();
   }
 
+  private track(sock: net.Socket) {
+    this.sockets.add(sock);
+    sock.on('close', () => { try { this.sockets.delete(sock); } catch {} });
+  }
+
   private async handleConn(local: net.Socket) {
+    this.track(local);
     const remote = new net.Socket();
+    this.track(remote);
     // 关键：两端 socket 必须常驻 error/close 處理器，否則傳輸中斷（ECONNRESET）會觸發未捕獲 error 事件把整個進程拖崩
-    const cleanup = () => { try { local.destroy(); } catch {} try { remote.destroy(); } catch {} };
+    const cleanup = () => {
+      try { local.destroy(); } catch {}
+      try { remote.destroy(); } catch {}
+      try { this.sockets.delete(local); } catch {}
+      try { this.sockets.delete(remote); } catch {}
+    };
     local.on('error', cleanup);
     remote.on('error', cleanup);
     local.on('close', cleanup);

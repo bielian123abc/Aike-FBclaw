@@ -23,7 +23,7 @@ import * as net from 'net';
 import { spawn } from 'child_process';
 import { URL, fileURLToPath } from 'url';
 import * as XLSX from 'xlsx';
-import { API_PORT, MOCK_FB, MOCK_FB_PORT, FB_BASE, DATA_DIR, SCREENSHOT_DIR, PROFILES_DIR, AVATAR_INBOX_DIR } from './config';
+import { API_PORT, MOCK_FB, MOCK_FB_PORT, FB_BASE, DATA_DIR, SCREENSHOT_DIR, PROFILES_DIR, AVATAR_INBOX_DIR, APP_ROOT, NODE_BIN } from './config';
 import { startMockFB } from './mock-facebook/server';
 import { ensureAccountDefaults, listAccounts, getAccount, createAccount, updateAccount, deleteAccount, createAccountsBatch, type Account } from './core/account-store';
 import { fingerprintFilePath } from './core/browser/fingerprint';
@@ -63,6 +63,7 @@ import { getGlobalGroupEntries, getCrossAccountOverlap } from './core/group-regi
 import { getAvatarStats, listInboxAvatars, markAvatarUsed, accountHasAvatar, saveUploadedAvatar } from './core/avatar';
 import { skillSetAvatar } from './skills/fb-core-skills';
 import { gatewayReachable } from './core/openclaw/engine';
+import { getLoggedInAccountIds, planAgentExecution } from './core/openclaw/execution-planner';
 
 // ---------- 啟動 Mock FB（若啟用） ----------
 if (MOCK_FB) {
@@ -477,6 +478,23 @@ async function route(url: URL, method: string, body: any): Promise<any> {
     return { success: true, raw: true, reply: reply ?? null, reachable: reply !== null };
   }
 
+  // AI 智能执行（真 AI 大脑规划）：要求配置模型 API；只针对当前已登录账号智能分配。
+  if (p === '/api/agent/smart-execute' && method === 'POST') {
+    const settings = getOpenClawSettings();
+    if (!settings.apiKey) {
+      return { ok: false, error: '请先在「伺服器 & 模型」页配置模型 API 金鑰，AI 智能执行需要模型支持。' };
+    }
+    // 若呼叫方指定了账号（单账号/分组智能执行），以指定为准；否则针对当前已登录账号。
+    const ids: string[] = Array.isArray(body.accountIds) && body.accountIds.length
+      ? body.accountIds.map((x: any) => String(x))
+      : getLoggedInAccountIds();
+    if (!ids.length) {
+      return { ok: false, error: '当前没有已登录/在线的账号，请先启动并登录账号后再执行 AI 智能执行。' };
+    }
+    const plan = await planAgentExecution(ids);
+    return { ok: true, plan, accountIds: ids };
+  }
+
   // OpenClaw Agent：進化記憶檢視（經驗筆記 + 已進化技能）
   if (p === '/api/agent/memory' && method === 'GET') {
     return { success: true, notes: getAllNotes(), skills: listSkills() };
@@ -521,6 +539,11 @@ async function route(url: URL, method: string, body: any): Promise<any> {
   }
   if (p === '/api/settings/openclaw' && method === 'POST') {
     const r = saveOpenClawSettings(body);
+    // 金鑰是經由啟動環境變數 DEEPSEEK_API_KEY 注入網關，running 中的網關不會熱更新 env，
+    // 故變更 apiKey 後必須重啟網關，新金鑰才會生效（否則 AI 仍「無回應」）。
+    if (r.ok && body && body.apiKey) {
+      try { restartOpenClawGateway(); } catch (e: any) { log('Gateway', '重啟排程失敗: ' + e.message); }
+    }
     return { success: r.ok, applied: r.applied, error: r.error, settings: getOpenClawSettings() };
   }
   if (p === '/api/openclaw/repair' && method === 'POST') {
@@ -1394,7 +1417,7 @@ function renderAccBody(accToProxy){
       +'<td style="color:'+stColor+'">'+(a.status||'未知')+'</td>'
       +'<td>'+proxyCell+'</td>'
       +'<td>-</td><td>-</td><td>—</td>'
-      +'<td><button class="btn-primary" data-id="'+a.accountId+'" onclick="launchEnv(this.dataset.id)">启动环境</button> <button class="btn-success" data-id="'+a.accountId+'" onclick="runSmart(this.dataset.id)">智能执行</button> <button class="btn-danger" data-id="'+a.accountId+'" onclick="deleteAccountBtn(this.dataset.id)">删除</button></td>'
+      +'<td><button class="btn-primary" data-id="'+a.accountId+'" onclick="launchEnv(this.dataset.id)">启动环境</button> <button class="btn-success" data-id="'+a.accountId+'" onclick="runSmart(this.dataset.id)">智能执行</button> <button style="background:#e6a23c;color:#fff;border:none;border-radius:4px;padding:4px 8px;cursor:pointer" data-id="'+a.accountId+'" onclick="closeWindow(this.dataset.id)">关闭窗口</button> <button class="btn-danger" data-id="'+a.accountId+'" onclick="deleteAccountBtn(this.dataset.id)">删除</button></td>'
       +'</tr>';
   }).join('');
 }
@@ -1403,6 +1426,7 @@ function toggleAcc(id,checked){ if(checked){ if(!selectedAccounts.includes(id)) 
 function toggleAll(c){ selectedAccounts = c? allAccounts.map(function(a){return a.accountId;}) : []; loadAccounts(); }
 function renderGroups(){ const g=document.getElementById('groupDef'); const sel=selectedAccounts.length?selectedAccounts.join('、'):'(未选)'; g.innerHTML='当前已选账号：'+esc(sel); }
 async function launchEnv(id){ const r=await fetch('/api/account/'+id+'/launch',{method:'POST'}); const j=await r.json(); toast(j.success?'环境已启动':'启动失败'); }
+async function closeWindow(id){ const r=await fetch('/api/account/'+id+'/close',{method:'POST'}); const j=await r.json(); toast(j.success?'窗口已关闭':'关闭失败'); loadAccounts(); }
 async function retileWindows(){ try{ const r=await fetch('/api/windows/retile',{method:'POST'}); const j=await r.json(); toast(j.success?'窗口已重新排布':'重排失敗'); }catch(e){ toast('重排失敗'); } }
 async function toggleAutoRetile(){ try{ const r=await fetch('/api/windows/auto-retile',{method:'GET'}); const j=await r.json(); const enabled=!(j.enabled||false); await fetch('/api/windows/auto-retile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})}); document.getElementById('autoRetileBtn').innerText='自动重排：'+(enabled?'开':'关'); toast(enabled?'已开启自动重排':'已关闭自动重排'); }catch(e){ toast('自动重排切换失败'); } }
 (async function initAutoRetileBtn(){ try{ const r=await fetch('/api/windows/auto-retile',{method:'GET'}); const j=await r.json(); const btn=document.getElementById('autoRetileBtn'); if(btn) btn.innerText='自动重排：'+(j.enabled?'开':'关'); }catch(e){} })();
@@ -1539,24 +1563,43 @@ async function runTask(type, params, accountId){
   const r=await fetch('/api/task/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:accountId, type:type, params:params||{}})});
   const j=await r.json(); return j;
 }
-async function runSmartSequence(ids){
-  abortFlag=false;
-  const seq=['sync','browse_feed','add_friends','join_groups','greet_new_friends','ai_chat_reply'];
-  for(const id of ids){
-    if(abortFlag){ toast('已终止'); break; }
-    toast('智能执行 '+id); document.getElementById('progressBox').innerHTML='当前模式：智能执行 '+id;
-    for(const step of seq){
-      if(abortFlag) break;
-      document.getElementById('progressBox').innerHTML='运行中：'+id+' → '+step;
-      try { await runTask(step, paramsFor(step), id); } catch(e){ toast(id+' '+step+' 异常: '+e.message); }
-      await new Promise(function(r){setTimeout(r,800);});
-    }
-  }
-  document.getElementById('progressBox').innerHTML='当前模式：待命<br>待执行：等待下发任务序列';
-  loadAccounts();
+// AI 智能执行（真 AI 大脑规划 + 针对已登录账号分配）。
+// 没有配置模型 API 时，server 端 smart-execute 会直接拒绝（返回 ok:false + 提示），
+// 不再像旧版那样「没 API 也在跑脚本」——那才是用户反对的摆设行为。
+async function runSmart(id){
+  await runAiSmartExecute([id]);
 }
-function runSmart(id){ runSmartSequence([id]); }
-function runAllSmart(){ runSmartSequence(allAccounts.map(function(a){return a.accountId;})); }
+async function runAllSmart(){
+  await runAiSmartExecute(null); // null = 由 server 针对当前已登录账号规划
+}
+async function runAiSmartExecute(accountIds){
+  abortFlag=false;
+  const progressBox=document.getElementById('progressBox');
+  if(progressBox) progressBox.innerHTML='AI 智能执行：正在请求 OpenClaw 规划…';
+  try{
+    const body={};
+    if(accountIds) body.accountIds=accountIds;
+    const r=await fetch('/api/agent/smart-execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const j=await r.json();
+    if(!j.ok){ toast(j.error||'AI 智能执行失败'); if(progressBox) progressBox.innerHTML='当前模式：待命'; return; }
+    const plan=j.plan||{accounts:[]};
+    const total=plan.accounts.length;
+    toast('AI 规划完成：'+total+' 个账号');
+    if(progressBox) progressBox.innerHTML='AI 规划：'+(plan.reason||'')+'<br>账号数：'+total;
+    for(const a of plan.accounts){
+      if(abortFlag){ toast('已终止'); break; }
+      for(const act of a.actions){
+        if(abortFlag) break;
+        if(progressBox) progressBox.innerHTML='运行中：'+a.accountId+' → '+act;
+        try{ await runTask(act, {}, a.accountId); }catch(e){ toast(a.accountId+' '+act+' 异常: '+(e&&e.message||e)); }
+        await new Promise(function(r){setTimeout(r,800);});
+      }
+    }
+    if(progressBox) progressBox.innerHTML='当前模式：待命<br>待执行：等待下发任务序列';
+    toast('AI 智能执行完成');
+    loadAccounts();
+  }catch(e){ toast('AI 智能执行异常：'+(e&&e.message||e)); if(progressBox) progressBox.innerHTML='当前模式：待命'; }
+}
 function runSelected(){
   if(!selectedFuncs.length){ toast('请先在左侧勾选功能，或直接点“全部账号智能执行”'); return; }
   const ids=selectedAccounts.length?selectedAccounts:allAccounts.map(function(a){return a.accountId;});
@@ -1849,6 +1892,20 @@ async function viewShard(encId){
 
 // ---------- OpenClaw 網關自管理 ----------
 let gatewayProc: any = null;
+let gatewayShutdown = false;          // 主動停止網關時抑制自動重啟
+let gatewayRestartTimer: ReturnType<typeof setTimeout> | null = null;
+let gatewayBackoff = 2000;            // 重啟退避（封頂 30s），成功啟動後重置
+function scheduleGatewayRestart() {
+  if (gatewayShutdown) return;
+  if (gatewayRestartTimer) return;
+  const delay = gatewayBackoff;
+  gatewayBackoff = Math.min(gatewayBackoff * 2, 30000);
+  gatewayRestartTimer = setTimeout(() => {
+    gatewayRestartTimer = null;
+    ensureOpenClawGateway().then(() => { gatewayBackoff = 2000; });
+  }, delay);
+  log('Gateway', `將於 ${delay}ms 後嘗試自動重啟`);
+}
 async function ensureOpenClawGateway() {
   const reachable = await new Promise<boolean>((resolve) => {
     const sock = net.connect({ host: '127.0.0.1', port: 18789 }, () => { try { sock.destroy(); } catch {} resolve(true); });
@@ -1856,7 +1913,7 @@ async function ensureOpenClawGateway() {
     sock.setTimeout(1500, () => { try { sock.destroy(); } catch {} resolve(false); });
   });
   if (reachable) { log('Gateway', ':18789 已存在，跳過啟動'); return; }
-  const cli = path.join(process.cwd(), 'node_modules', 'openclaw', 'openclaw.mjs');
+  const cli = path.join(APP_ROOT, 'node_modules', 'openclaw', 'openclaw.mjs');
   try {
     // 把使用者設定的 DeepSeek 金鑰注入網關啟動環境。
     // 新版 OpenClaw 不允許把 apiKey 寫進 openclaw.json（schema 禁止），
@@ -1864,14 +1921,30 @@ async function ensureOpenClawGateway() {
     const gatewayEnv = { ...process.env };
     const ocSettings = getOpenClawSettings();
     if (ocSettings.apiKey) gatewayEnv.DEEPSEEK_API_KEY = ocSettings.apiKey;
-    gatewayProc = spawn(process.execPath, [cli, 'gateway'], { env: gatewayEnv, windowsHide: true });
+    // 安裝版 process.execPath 是 Electron，不能拿來跑 .mjs；統一用自帶 NODE_BIN 啟動網關。
+    gatewayProc = spawn(NODE_BIN, [cli, 'gateway'], { env: gatewayEnv, windowsHide: true });
     gatewayProc.on('error', (e: any) => log('Gateway', '啟動失敗: ' + e.message));
-    gatewayProc.on('exit', (c: any) => { if (gatewayProc) log('Gateway', '進程結束 code=' + c); });
+    gatewayProc.on('exit', (c: any) => {
+      gatewayProc = null; // 重置，允許下次重新拉起
+      log('Gateway', '進程結束 code=' + c + '，排程自動重啟');
+      scheduleGatewayRestart();
+    });
     log('Gateway', '已嘗試啟動 OpenClaw 網關 (:18789)');
   } catch (e: any) { log('Gateway', '啟動異常: ' + e.message); }
 }
 function stopOpenClawGateway() {
-  if (gatewayProc) { try { gatewayProc.kill(); } catch {} gatewayProc = null; log('Gateway', '已關閉網關'); }
+  gatewayShutdown = true;
+  if (gatewayRestartTimer) { clearTimeout(gatewayRestartTimer); gatewayRestartTimer = null; }
+  if (gatewayProc) { try { gatewayProc.kill(); } catch {} gatewayProc = null; }
+  log('Gateway', '已關閉網關');
+}
+// 重啟網關（用於使用者變更模型金鑰後讓新 DEEPSEEK_API_KEY env 生效）。
+function restartOpenClawGateway() {
+  gatewayShutdown = false; // 允許重啟後的常駐自動重啟
+  if (gatewayRestartTimer) { clearTimeout(gatewayRestartTimer); gatewayRestartTimer = null; }
+  if (gatewayProc) { try { gatewayProc.kill('SIGKILL'); } catch {} gatewayProc = null; }
+  log('Gateway', '排程重啟（套用新金鑰）');
+  setTimeout(() => { ensureOpenClawGateway(); }, 600);
 }
 
 // ---------- 啟動 ----------

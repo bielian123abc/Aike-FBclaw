@@ -21,3 +21,25 @@ Thumbs.db
 _probe.ts
 _probe2.ts
 _selftest.txt
+
+# 隨包附的瀏覽器二進位（431MB，不進 git；由 electron-builder 打包）
+# 只排除根目錄 browser/，避免誤傷 src/core/browser/ 源碼
+/browser/
+
+# 測試截圖（可能含 FB 頁面/帳號資訊，敏感）
+/fbtest_shots/
+
+# 開發期臨時測試腳本（含明文 API Key / 真實帳號 ID，不上傳）
+scripts/probe-key.mjs
+scripts/self-check.mjs
+scripts/diag.cjs
+scripts/realtest.cjs
+scripts/realtest2.cjs
+scripts/realtest3.cjs
+scripts/realtest4.cjs
+scripts/langtest2.cjs
+scripts/test-lang.cjs
+scripts/seed-accounts.cjs
+scripts/served_root.html
+scripts/read_xlsx.py
+scripts/clear_log.txt

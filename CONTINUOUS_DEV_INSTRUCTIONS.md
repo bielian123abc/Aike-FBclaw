@@ -89,7 +89,7 @@
 ```
 [ ] 服务器: curl localhost:18990/api/status 返回正常
 [ ] Gateway: curl 127.0.0.1:18789/health 返回live
-[ ] DeepSeek残留: grep "api.deepseek.com\|YOUR_DEEPSEEK_API_KEY" src/ 必须为空
+[ ] DeepSeek残留: grep "api.deepseek.com\|sk-" src/ 必须为空
 [ ] JS语法: new Function(html script) 无错误
 [ ] 面板可访问: curl localhost:18990/ 返回200
 [ ] 账号: curl localhost:18990/api/account-states 返回正确

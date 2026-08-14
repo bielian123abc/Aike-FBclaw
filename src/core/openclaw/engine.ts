@@ -1,7 +1,8 @@
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as net from 'net';
-import { AI_CONFIG } from '../../config';
+import * as fs from 'fs';
+import { AI_CONFIG, APP_ROOT, NODE_BIN, OPENCLAW_CONFIG_FILE } from '../../config';
 
 /**
  * OpenClaw AI Engine — 软件内「唯一」的 AI 智能體客户端
@@ -16,7 +17,9 @@ import { AI_CONFIG } from '../../config';
  * 直接裸連較脆弱；CLI 已內部處理配對）。
  */
 
-const OPENCLAW_CLI = path.join(process.cwd(), 'node_modules', 'openclaw', 'openclaw.mjs');
+// 安裝版下 process.cwd() 是安裝根（非 resources/app），必須用 APP_ROOT 反推到
+// resources/app/node_modules/openclaw/openclaw.mjs，否則路徑拼錯 → spawn 失敗 → AI 無回應。
+const OPENCLAW_CLI = path.join(APP_ROOT, 'node_modules', 'openclaw', 'openclaw.mjs');
 const GATEWAY_PORT = 18789;
 
 export interface OpenClawConfig {
@@ -74,30 +77,56 @@ export function gatewayReachable(): Promise<boolean> {
  * 成功回傳純文字回覆；網關不可達或失敗回傳 null（由呼叫方決定本地兜底）。
  */
 export async function runOpenClawAgent(message: string, maxTokens?: number): Promise<string | null> {
-  if (!(await gatewayReachable())) return null;
-  // 注意：openclaw agent CLI 無 --max-tokens 旗標（會導致 exit 1 使所有呼叫失敗）；
-  // token 長度控制改由呼叫方在收到回覆後自行截斷。
+  // openclaw agent CLI 有兩種運作模式：
+  // 1) 透過 WebSocket 連本地 gateway（:18789）使用 gateway 已載入的 key；
+  // 2) gateway 連不上時，以 embedded agent 用環境變數 DEEPSEEK_API_KEY 直連模型。
+  // 因此無論 gateway 是否 reachable，都必須把使用者的 key 帶進 env，確保任一模式都能推理。
   const args = ['agent', '--agent', 'main', '--message', message, '--json'];
+  // 直接讀取使用者保存的 key；避免與 openclaw-config.ts 產生循環引用。
+  let apiKey = '';
+  try {
+    if (fs.existsSync(OPENCLAW_CONFIG_FILE)) {
+      const cfg = JSON.parse(fs.readFileSync(OPENCLAW_CONFIG_FILE, 'utf-8'));
+      apiKey = cfg.apiKey || '';
+    }
+  } catch {}
+  const childEnv: NodeJS.ProcessEnv = { ...process.env };
+  if (apiKey) childEnv.DEEPSEEK_API_KEY = apiKey;
   return new Promise((resolve) => {
     let stdout = '';
-    const proc = spawn(process.execPath, [OPENCLAW_CLI, ...args], {
-      env: { ...process.env },
+    let stderr = '';
+    const proc = spawn(NODE_BIN, [OPENCLAW_CLI, ...args], {
+      env: childEnv,
       windowsHide: true,
       timeout: 120000,
     });
     proc.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
-    proc.stderr.on('data', () => { /* 吞掉，避免刷屏 */ });
-    proc.on('error', () => resolve(null));
+    proc.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+    proc.on('error', (e: any) => {
+      console.log('[OpenClaw] spawn error:', e.message);
+      resolve(null);
+    });
     proc.on('close', (code) => {
+      // OpenClaw --json 會把結果寫到 stdout；payloads 位於最外層（不是 result.payloads）。
+      // 某些終端/管道場景下，結構化摘要會進 stderr，所以兩邊都試。
+      let text = '';
       try {
         const parsed = JSON.parse(stdout);
-        const payloads = parsed?.result?.payloads || [];
-        const text = payloads.map((p: any) => p.text || '').join('\n').trim();
-        resolve(text || null);
+        const payloads = parsed?.payloads || parsed?.result?.payloads || [];
+        text = payloads.map((p: any) => p.text || '').join('\n').trim();
       } catch {
-        const m = stdout.match(/"text"\s*:\s*"([^"]*)"/);
-        resolve(m ? m[1] : (code === 0 ? stdout.trim() || null : null));
+        const combined = stdout + '\n' + stderr;
+        const m = combined.match(/"text"\s*:\s*"([^"]*)"/);
+        text = m ? m[1] : (code === 0 ? stdout.trim() : '');
       }
+      // 把 stderr 的 gateway/模型錯誤摘要寫入日誌，方便診斷「無回應」時的真因。
+      if (!text && stderr) {
+        const errLine = stderr.split('\n').find((l) =>
+          /GatewayTransportError|金鑰|api.?key|unauthorized|401|403|invalid|rate.?limit/i.test(l)
+        ) || stderr.slice(0, 300);
+        console.log('[OpenClaw] CLI 無回應摘要:', errLine.replace(/\s+/g, ' '));
+      }
+      resolve(text || null);
     });
   });
 }

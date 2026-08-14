@@ -10,7 +10,15 @@ import { fileURLToPath } from 'url';
 // 使软件安装到任意目录都能正确定位数据/资源/文档，不再写死 G:/Aike-FBclaw。
 // 开发态：dist/server.js 位于 G:/Aike-FBclaw/dist/，故 APP_ROOT = G:/Aike-FBclaw（与旧行为一致）。
 const __DIR = path.dirname(fileURLToPath(import.meta.url)); // = dist/
-export const APP_ROOT = path.resolve(__DIR, '..'); // = 安装根
+export const APP_ROOT = path.resolve(__DIR, '..'); // = 安装根（打包后 = resources/app）
+
+// 自帶 node 運行時（打包隨附 node-runtime/node.exe）。
+// 安裝版 process.execPath 是 Electron 主程序，絕不能拿來跑 .mjs；
+// 一律優先用此 node 啟動 OpenClaw 網關/CLI，確保打封包後 AI 本體可正常拉起。
+export const NODE_BIN = (() => {
+  const bundled = path.join(APP_ROOT, 'node-runtime', 'node.exe');
+  return fs.existsSync(bundled) ? bundled : process.execPath;
+})();
 
 // ---------- 简单 .env 加载（无第三方依赖） ----------
 function loadEnv() {

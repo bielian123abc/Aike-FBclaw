@@ -14,7 +14,7 @@
 import { chromium, BrowserContext, Page } from 'playwright-core';
 import * as fs from 'fs';
 import * as path from 'path';
-import { FB_BASE, MOCK_FB, MOCK_FB_PORT, PROFILES_DIR, SCREENSHOT_DIR, HEADLESS, DATA_DIR } from '../../config';
+import { FB_BASE, MOCK_FB, MOCK_FB_PORT, PROFILES_DIR, SCREENSHOT_DIR, HEADLESS, DATA_DIR, APP_ROOT } from '../../config';
 import { getAccount, updateAccount } from '../account-store';
 import { getProxyManager } from '../proxy/proxy-manager';
 import { getFingerprintEngine } from './fingerprint';
@@ -23,7 +23,14 @@ import { windowManager, computeTileLayout } from '../system/window-layout';
 import { getScreenResolution } from '../system/system-profiler';
 import { isRecording, attachRecorder } from './demo-recorder';
 
-const CHROME_PATH = 'C:/Users/UR/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe';
+// 隨附瀏覽器：打包後位於 resources/app/browser/chromium-1234/chrome-win64/chrome.exe；
+// 開發態 APP_ROOT=项目根，browser/ 亦在同層。找不到再回退到本機 ms-playwright 快取。
+const CHROME_PATH = (() => {
+  const bundled = path.join(APP_ROOT, 'browser', 'chromium-1234', 'chrome-win64', 'chrome.exe');
+  if (fs.existsSync(bundled)) return bundled;
+  const local = 'C:/Users/UR/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe';
+  return fs.existsSync(local) ? local : bundled;
+})();
 
 export interface Session {
   accountId: string;
@@ -71,14 +78,19 @@ export function resolveFbBase(accountId: string): string {
 export async function launchSession(accountId: string, opts?: { headless?: boolean }): Promise<Session> {
   const existing = sessions.get(accountId);
   if (existing) {
-    // 正確偵測瀏覽器是否仍存活：page.url() 是同步 getter，await 字串永遠不拋錯，
-    // 故改用 browser().isConnected()（被外部強殺/崩潰時為 false）判斷。
-    const pageClosed = existing.context.pages()[0]?.isClosed?.() ?? false;
-    const alive = !!existing.context.browser()?.isConnected() && !pageClosed;
+    // 正確偵測瀏覽器是否仍存活：手動 X 關窗後 context.pages() 可能為空（page 已銷毀，
+    // isClosed 取到 undefined → 誤判存活），故同時要求「瀏覽器已連線」+「仍存在可見 page」。
+    const browserConnected = !!existing.context.browser()?.isConnected();
+    const pages = existing.context.pages() || [];
+    const hasPage = pages.length > 0;
+    const pageClosed = pages[0]?.isClosed?.() ?? false;
+    const alive = browserConnected && hasPage && !pageClosed;
     if (!alive) {
       try { await existing.context.close().catch(() => {}); } catch {}
       sessions.delete(accountId);
       windowManager.unregister(accountId);
+      // 對賬狀態：舊視窗已失效，先標離線，稍後重開會再標 running
+      try { updateAccount(accountId, { status: 'offline' }); } catch {}
     } else {
       return existing;
     }
@@ -230,6 +242,8 @@ export async function closeSession(accountId: string, saveState = true): Promise
   try { await s.context.close(); } catch {}
   sessions.delete(accountId);
   windowManager.unregister(accountId);
+  // 同步帳號狀態為離線，避免手動關窗/API 關閉後 UI 仍顯示「已打開」
+  try { updateAccount(accountId, { status: 'offline' }); } catch {}
   // 關閉一個視窗後，把剩餘視窗重新擴展到全螢幕，避免留空
   try { await retileAllSessions(); } catch (e: any) { console.log(`[Session] 關窗後重鋪失敗: ${e.message}`); }
 }

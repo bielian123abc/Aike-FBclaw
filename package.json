@@ -1,6 +1,6 @@
 {
   "name": "aike-fbclaw",
-  "version": "1.0.0",
+  "version": "1.0.6",
   "private": true,
   "description": "Aike-FBclaw — Facebook 多账号 AI 智能运营桌面智能体",
   "author": "Aike",
@@ -27,7 +27,9 @@
       "electron/**/*.cjs",
       "dist/**/*",
       "ui/**/*",
-      "node-runtime/**/*",
+    "node-runtime/**/*",
+    "browser/**/*",
+    "node_modules/openclaw/**/*",
       "assets/**/*",
       "PROJECT_BRIEF.md",
       "SYSTEM_LOGIC_MAP.md",

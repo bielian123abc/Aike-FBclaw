@@ -16,6 +16,7 @@ import { getAccount, ensureMessengerPin, getJoinedGroupCount, recordJoinedGroup 
 import { resolveFbBase } from '../core/browser/session-manager';
 import * as human from '../utils/human-behavior';
 import * as path from 'path';
+import * as fs from 'fs';
 import { FB_BASE, MAX_GROUPS_PER_ACCOUNT, AVATAR_INBOX_DIR } from '../config';
 import { isGroupGloballyJoined, recordGlobalJoinedGroup } from '../core/group-registry';
 import { getNextAvailableAvatar, markAvatarUsed, accountHasAvatar } from '../core/avatar';
@@ -729,69 +730,211 @@ export async function isTaiwanGroup(page: any): Promise<{ ok: boolean; reason?: 
 export async function handleMessengerPin(ctx: SkillContext): Promise<{ handled: boolean; error?: string }> {
   try {
     await human.randomDelay(600, 1200);
-    const passwordInputs = await ctx.page.$$('input[type="password"]');
-    if (passwordInputs.length === 0) return { handled: false };
+    // 診斷：截圖 + 列出可見按鈕標籤，便於視覺驗證 PIN 對話框是否真的被處理
+    try { fs.mkdirSync('G:/fbtest_shots/diag', { recursive: true }); } catch {}
+    try { await ctx.page.screenshot({ path: 'G:/fbtest_shots/diag/pin-01-dialog.png' }); } catch (e: any) { console.log(`[PIN ${ctx.accountId}] shot fail ${e.message}`); }
 
     const pageText = await ctx.page.evaluate(() => (document.body?.innerText || '').slice(0, 3000));
+
+    // ⚠️ 真實 FB PIN 流程：①介紹畫面只有「Créer un code PIN / Create PIN」按鈕；②點完出現 6 個數字框；③可能要再確認一次 PIN。
+    // 若當前畫面沒有輸入框，先嘗試點擊「建立 PIN」按鈕，把對話框推進到輸入步驟。
+    const createPinBtnTexts = [
+      'Créer un code PIN', 'Créer un code', 'Créer',
+      'Create PIN', 'Create a PIN', 'Set up PIN', 'Get started',
+      '建立 PIN', '建立 PIN 碼', '建立密碼', '設定 PIN', '設定 PIN 碼', '新增 PIN',
+      'Crear PIN', 'Crear un PIN', 'Crear', 'Crear código PIN',
+      'PIN erstellen', 'Erstellen', 'Neuen PIN erstellen',
+      'Crea PIN', 'Crea un PIN', 'Crea un codice PIN',
+    ];
+    const introKw = /Créez un code PIN|Create a PIN|Set up PIN|建立 PIN|設定 PIN|Crear PIN|PIN erstellen|Crea PIN|pour accéder à vos discussions|to access your chats|para acceder a tus conversaciones|accedere alle tue conversazioni/i;
+    const maybeIntro = introKw.test(pageText);
+    if (maybeIntro) {
+      // 先記錄按鈕標籤到檔案，方便離線分析
+      try {
+        const labels = await ctx.page.evaluate(() => Array.from(document.querySelectorAll('button, [role="button"], a, div[role="button"]')).map((b: any) => ({
+          text: (b.textContent || '').trim().slice(0, 60),
+          aria: (b.getAttribute('aria-label') || '').slice(0, 60),
+          role: b.getAttribute('role'),
+          tag: b.tagName,
+        })).filter(x => x.text || x.aria));
+        fs.writeFileSync('G:/fbtest_shots/diag/pin-01-buttons.json', JSON.stringify(labels, null, 2));
+      } catch {}
+
+      // Playwright locator 點擊：必須選到真正的 [role="button"] 元素，避免匹配到外層 div 死區
+      let clickedIntro = false;
+      let clickLog = '';
+      for (const txt of createPinBtnTexts) {
+        try {
+          const loc = ctx.page.locator('[role="button"], button').filter({ hasText: txt }).first();
+          const n = await loc.count();
+          if (n > 0) {
+            const box = await loc.boundingBox().catch(() => null);
+            // 過濾掉明顯是 viewport/body 的巨型元素
+            if (box && box.width < 800 && box.height < 200) {
+              await loc.click({ timeout: 5000, force: true });
+              clickedIntro = true;
+              clickLog = `locator(${txt}) box=${JSON.stringify(box)}`;
+              break;
+            }
+          }
+        } catch (e: any) { clickLog += `locator(${txt}) err=${e.message}; `; }
+      }
+      // 策略 2：getByRole + name regex + force
+      if (!clickedIntro) {
+        try {
+          const loc = ctx.page.getByRole('button', { name: /建立 PIN|Create PIN|Créer|Crear|Erstellen|Crea/i }).first();
+          const box = await loc.boundingBox().catch(() => null);
+          if (await loc.count() > 0 && box && box.width < 800 && box.height < 200) {
+            await loc.click({ timeout: 5000, force: true });
+            clickedIntro = true;
+            clickLog = 'getByRole';
+          }
+        } catch (e: any) { clickLog += `getByRole err=${e.message}; `; }
+      }
+      // 兜底：在瀏覽器內直接點含有建立文字的按鈕
+      if (!clickedIntro) {
+        clickedIntro = await ctx.page.evaluate((texts) => {
+          const kw = new RegExp(texts.join('|'), 'i');
+          const all = Array.from(document.querySelectorAll('button, [role="button"], a, div[role="button"], div'));
+          for (const b of all) {
+            const txt = ((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || '')).trim();
+            if (kw.test(txt)) {
+              try {
+                (b as any).scrollIntoView({ block: 'center', behavior: 'instant' });
+                (b as any).click();
+                return true;
+              } catch {}
+            }
+          }
+          return false;
+        }, createPinBtnTexts);
+        clickLog = clickedIntro ? 'evaluate' : 'evaluate-failed';
+      }
+      try { fs.writeFileSync('G:/fbtest_shots/diag/pin-01-click-log.json', JSON.stringify({ clickedIntro, clickLog, ts: Date.now() }, null, 2)); } catch {}
+      if (clickedIntro) {
+        console.log(`[PIN ${ctx.accountId}] 已點擊「建立 PIN」介紹按鈕，等待輸入框`);
+        await human.randomDelay(1500, 2500);
+        await ctx.page.screenshot({ path: 'G:/fbtest_shots/diag/pin-02-after-intro.png' }).catch(() => {});
+      } else {
+        console.log(`[PIN ${ctx.accountId}] 未能點擊「建立 PIN」介紹按鈕: ${clickLog}`);
+      }
+    }
+
+    // 輔助：重新偵測頁面上的 PIN 輸入框
+    const detectPinFields = async () => {
+      const allInputs = await ctx.page.$$('input');
+      const fields: any[] = [];
+      for (const inp of allInputs) {
+        const info = await inp.evaluate((el: any) => {
+          const t = (el.getAttribute('type') || 'text').toLowerCase();
+          const im = (el.getAttribute('inputmode') || '').toLowerCase();
+          const ml = parseInt(el.getAttribute('maxlength') || '0', 10);
+          const ph = (el.getAttribute('placeholder') || '').toLowerCase();
+          return { type: t, im, ml, ph, visible: el.getClientRects().length > 0 };
+        }).catch(() => ({ type: 'unknown', im: '', ml: 0, ph: '', visible: false }));
+        const isPinLike = info.type === 'password' || info.type === 'tel' || info.im === 'numeric' || info.ml === 1 || /pin|code|密碼|密文|chiffre|codigo|código|パスワード/i.test(info.ph);
+        if (isPinLike) fields.push(inp);
+      }
+      if (fields.length === 0) {
+        const pw = await ctx.page.$$('input[type="password"]');
+        fields.push(...pw);
+      }
+      return fields;
+    };
+
+    let pinFields = await detectPinFields();
+    const btnLabels = await ctx.page.evaluate(() => Array.from(document.querySelectorAll('button, div[role="button"]')).map((b: any) => (b.textContent || '').trim()).filter((t: string) => t.length > 0 && t.length < 30).slice(0, 24)).catch(() => []);
+    console.log(`[PIN ${ctx.accountId}] pinFields=${pinFields.length} btns=${JSON.stringify(btnLabels).slice(0, 500)}`);
+
     // 跨語言識別：先以 PIN/code/加密 強信號確認是 PIN 對話框，再用建立/輸入 類詞區分
     const hasPinSignal = /PIN|code|chiffrement|cifrado|verschlüssel/i.test(pageText);
     const wantsCreate = /create|créer|crea|建立|設定|set up|new|新增|get started/i.test(pageText);
     const wantsVerify = /enter|saisir|輸入|confirm|vérifier|verify|unlock/i.test(pageText);
-    // 「建立」意圖優先於「輸入」：建立對話框的輸入框佔位也常含「輸入」，
-    // 若兩者同時出現（如中文「請建立 6 位數 PIN…輸入 PIN」）應視為建立而非解鎖。
     const isCreate = hasPinSignal && (wantsCreate || !wantsVerify);
     const isVerify = hasPinSignal && !wantsCreate && wantsVerify;
 
     if (!isCreate && !isVerify) return { handled: false };
-
-    if (isVerify) {
-      const storedPin = getAccount(ctx.accountId)?.messengerPin;
-      if (!storedPin) {
-        return {
-          handled: false,
-          error: 'Messenger 要求輸入既有 PIN，但帳號設定中找不到 messengerPin。請在 accounts.json 為該帳號補上 6 位數 PIN，或先手動解鎖一次讓系統建立新 PIN。',
-        };
-      }
-      const input = passwordInputs[0];
-      await input.click();
-      await human.randomDelay(200, 500);
-      await input.fill(storedPin);
-      await ctx.page.keyboard.press('Enter');
-    } else {
-      const pin = ensureMessengerPin(ctx.accountId);
-      for (const input of passwordInputs) {
-        await input.click();
-        await human.randomDelay(200, 500);
-        await input.fill(pin);
-        await human.randomDelay(400, 800);
-      }
-      const createBtn =
-        await ctx.page.$('div[role="button"]:has-text("Create PIN")') ||
-        await ctx.page.$('button:has-text("Create PIN")') ||
-        await ctx.page.$('div[role="button"]:has-text("建立 PIN")') ||
-        await ctx.page.$('div[role="button"]:has-text("建立")') ||
-        await ctx.page.$('div[role="button"]:has-text("Créer")') ||
-        await ctx.page.$('div[role="button"]:has-text("Crear")') ||
-        await ctx.page.$('div[role="button"]:has-text("Next")') ||
-        await ctx.page.$('div[role="button"]:has-text("繼續")') ||
-        await ctx.page.$('div[role="button"]:has-text("Continuer")') ||
-        await ctx.page.$('div[role="button"]:has-text("Continue")') ||
-        await ctx.page.$('div[role="button"]:has-text("OK")');
-      if (createBtn) {
-        await createBtn.click();
-      } else {
-        // 找不到建立按鈕，嘗試對最後一個輸入框按 Enter 觸發提交
-        const last = passwordInputs[passwordInputs.length - 1];
-        await last.press('Enter');
-      }
+    if (pinFields.length === 0) {
+      return { handled: false, error: '偵測到 PIN 對話框但找不到任何 PIN 輸入框（password/tel/numeric/數字框）' };
     }
 
-    // 等待 PIN 對話框消失（最多約 15 秒）
+    const pin = isVerify ? (getAccount(ctx.accountId)?.messengerPin || '') : ensureMessengerPin(ctx.accountId);
+    if (isVerify && !pin) {
+      return {
+        handled: false,
+        error: 'Messenger 要求輸入既有 PIN，但帳號設定中找不到 messengerPin。請在 accounts.json 為該帳號補上 6 位數 PIN，或先手動解鎖一次讓系統建立新 PIN。',
+      };
+    }
+
+    // 最多處理兩輪：建立 + 確認
+    for (let round = 0; round < 2; round++) {
+      pinFields = await detectPinFields();
+      if (pinFields.length === 0) break;
+
+      // 填寫 PIN：6 個獨立數字框 → 逐位填入；否則整串填入
+      if (pinFields.length === 6) {
+        for (let i = 0; i < 6; i++) {
+          const f = pinFields[i];
+          await f.click().catch(() => {});
+          await human.randomDelay(120, 300);
+          await f.fill(String(pin[i] ?? '0')).catch(() => {});
+          await human.randomDelay(120, 300);
+        }
+      } else {
+        for (const f of pinFields) {
+          await f.click().catch(() => {});
+          await human.randomDelay(150, 350);
+          await f.fill(pin).catch(() => {});
+          await human.randomDelay(300, 600);
+        }
+      }
+
+      // 截圖記錄
+      await ctx.page.screenshot({ path: `G:/fbtest_shots/diag/pin-03-filled-${round}.png` }).catch(() => {});
+
+      // 點擊建立/確認/繼續按鈕
+      const submitTexts = [
+        'Create PIN', 'Create a PIN', 'Créer', 'Créer un code PIN',
+        '建立 PIN', '建立', '設定 PIN', '確認', '完成', 'Done',
+        'Crear', 'Crear PIN', 'Continuar', 'Siguiente',
+        'Erstellen', 'Weiter', 'Fertig',
+        'Crea', 'Crea PIN', 'Avanti', 'Fine',
+        'Next', 'Continue', 'OK', 'Save', '儲存', '保存',
+      ];
+      let submitted = await clickTextRobust(ctx.page, submitTexts, 'button, [role="button"], a', 5000);
+      if (!submitted) {
+        // 兜底：在瀏覽器內直接點含有提交文字的按鈕
+        submitted = await ctx.page.evaluate((texts) => {
+          const kw = new RegExp(texts.join('|'), 'i');
+          const btns = Array.from(document.querySelectorAll('button, [role="button"], a, div[role="button"]'));
+          for (const b of btns) {
+            if (kw.test((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || ''))) {
+              try { (b as any).scrollIntoView({ block: 'center' }); (b as any).click(); return true; } catch {}
+            }
+          }
+          return false;
+        }, submitTexts);
+      }
+      if (!submitted) {
+        // 再兜底：對最後一個輸入框按 Enter
+        const last = pinFields[pinFields.length - 1];
+        if (last) await last.press('Enter').catch(() => {});
+      }
+
+      await human.randomDelay(1500, 2500);
+      // 若對話框已消失（無輸入框）則完成；否則進入第二輪（確認 PIN）
+      const still = await detectPinFields();
+      if (still.length === 0) break;
+      console.log(`[PIN ${ctx.accountId}] round ${round} 後仍有輸入框，進入確認輪`);
+    }
+
+    // 最後等待 PIN 對話框消失
     for (let i = 0; i < 15; i++) {
       await human.randomDelay(800, 1200);
-      const still = await ctx.page.$$('input[type="password"]');
+      const still = await detectPinFields();
       if (still.length === 0) break;
     }
+    await ctx.page.screenshot({ path: 'G:/fbtest_shots/diag/pin-04-done.png' }).catch(() => {});
     return { handled: true };
   } catch (error: any) {
     return { handled: false, error: error.message };
@@ -1522,80 +1665,445 @@ export async function isFbLangTw(page: any): Promise<boolean> {
   }
 }
 
+/** 輪詢確認 <html lang> 是否已變為繁體中文(台灣) */
+async function pollIsFbLangTw(page: any, maxMs = 10000, interval = 800): Promise<boolean> {
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    if (await isFbLangTw(page)) return true;
+    await new Promise(r => setTimeout(r, interval));
+  }
+  return false;
+}
+
 /**
- * 在 /settings?tab=language 頁將語言設為繁體中文(台灣)。
- * 同時支援兩種真實 FB UI：
- *   A) 傳統 <select> 下拉（部分地區/版本仍為此結構）
- *   B) 展開式「帳號語言 / Facebook 語言」行：點 Edit/該行 → 選 繁體中文（台灣）→ 儲存
+ * ⚠️ 已移除 setLangViaUrlParam（URL ?locale2=zh_TW 切換語言）。
+ * 用戶明確禁止該方式：Facebook 語言只能經「帳號內設定頁」切換，網址後綴 locale 參數無效。
+ * 語言切換嚴格走 setLangOnSettingsPage（設定頁兩步：展開語言行 → 點 中文(台灣) → 儲存）。
  */
-async function setLangOnSettingsPage(page: any, log: (m: string) => void): Promise<boolean> {
-  // A) <select>
-  const select = page.locator('select').first();
-  if (await select.count()) {
-    const opts = await select.locator('option').all();
-    for (const opt of opts) {
-      const t = ((await opt.innerText().catch(() => '')) || '').trim();
-      if (isTwText(t)) {
-        const val = (await opt.getAttribute('value').catch(() => '')) || t;
-        await select.selectOption({ value: val }).catch(() => {});
-        await human.randomDelay(400, 900);
-        await clickByTexts(page, ['Save Changes', 'Change Language', '儲存變更', '變更', '確認', 'Save'], 'button', 3000).catch(() => {});
-        await human.randomDelay(600, 1200);
-        return true;
-      }
+
+/** 強健點擊：先 scrollIntoView 再點，解決選擇器選項在可滾動列表底部時不可見而點不到的問題 */
+async function clickTextRobust(page: any, texts: string[], selectorBase: string, timeout = 5000): Promise<boolean> {
+  for (const t of texts) {
+    const loc = page.locator(selectorBase).filter({ hasText: t });
+    const n = await loc.count();
+    for (let i = 0; i < n; i++) {
+      const el = loc.nth(i);
+      try {
+        await el.scrollIntoViewIfNeeded({ timeout: 2500 });
+        if (await el.isVisible().catch(() => false)) {
+          await el.click({ timeout });
+          return true;
+        }
+      } catch { /* 試下一個可見匹配 */ }
     }
   }
+  return false;
+}
 
-  // B) 展開式「帳號語言 / Facebook 語言」行（兼容法/西/葡/德/意文）
-  const row = page.locator('div, tr, li, section').filter({
-    hasText: /帳號語言|Facebook 語言|Account Language|應用程式語言|應用程序語言|App Language|Langue du compte|Langue de l'application|Idioma de la cuenta|Idioma de la aplicación|Idioma do aplicativo|Sprache des Kontos|Sprache der App|Lingua dell'account|Lingua dell'app/i,
-  }).first();
-  if (await row.count()) {
-    // 先嘗試該行內的 Edit / 編輯 / 展開 按鈕
-    await clickByTexts(page, ['Edit', '編輯', '编辑', '展開', '展开', 'Change', '變更'],
-      '[role="button"], button, a, div', 4000).catch(() => {});
-    // 若沒點到 Edit，直接點該行本身（FB 部分版本點整行即展開）
-    await row.click({ timeout: 4000 }).catch(() => {});
-    await human.randomDelay(800, 1500);
+/** 繁體中文(台灣) 在各語言 FB UI 下的寫法（含簡體/英文/法/西/葡/德/意/日/韓） */
+const TW_OPTION_TEXTS = [
+  'Traditional Chinese (Taiwan)',
+  '繁體中文（台灣）', '繁體中文 (台灣)', '正體中文（台灣）', '正體中文 (台灣)',
+  '中文(台灣)', '中文（台灣）', '中文(台湾)', '中文（台湾）',
+  'Chinois traditionnel (Taïwan)', 'Chinois traditionnel (Taiwan)',
+  'Chino tradicional (Taiwán)', 'Chino tradicional (Taiwan)',
+  'Chinês tradicional (Taiwan)',
+  'Traditionelles Chinesisch (Taiwan)',
+  'Cinese tradizionale (Taiwan)',
+  '繁体中文（台湾）', '繁體中文（台湾）',
+  '번체중국어(대만)',
+];
 
-    if (await clickByTexts(page,
-        [
-          'Traditional Chinese (Taiwan)',
-          '繁體中文（台灣）', '繁體中文 (台灣)', '正體中文（台灣）', '中文(台灣)', '中文（台灣）',
-          'Chinois traditionnel (Taïwan)', 'Chinois traditionnel (Taiwan)',
-          'Chino tradicional (Taiwán)', 'Chino tradicional (Taiwan)',
-          'Chinês tradicional (Taiwan)',
-          'Traditionelles Chinesisch (Taiwan)',
-          'Cinese tradizionale (Taiwan)',
-          '繁体中文（台湾）', '繁體中文（台湾）',
-          '번체중국어(대만)'
-        ],
-        '[role="option"], [role="menuitem"], a, button, div, span', 6000)) {
-      await human.randomDelay(500, 1000);
-      await clickByTexts(page, ['Save Changes', 'Change Language', '儲存變更', '變更', '確認', 'Save', '完成', 'Done'], 'button', 3000).catch(() => {});
-      await human.randomDelay(600, 1200);
+/** 嚴格判斷某選項文字是否為「繁體中文(台灣)」：必須同時含「台灣」指示 + 「繁體」指示，
+ *  以此排除 English / 簡體中文 / 其它語言，避免誤點第一個選項落到英文。 */
+function isTwOption(txt: string): boolean {
+  const t = (txt || '').toLowerCase();
+  const hasTaiwan = /台灣|台湾|taiwan|taïwan|taiwán/.test(t);
+  const hasTrad = /繁體|正體|traditional|tradicion|traditionell/.test(t);
+  return hasTaiwan && hasTrad;
+}
+
+/** 在 FB 語言選擇器（dialog / menu / 滾動列表）內找到並點擊 繁體中文(台灣)。
+ *  策略：先用搜尋框過濾（最穩定），再嘗試精確點擊選項行，最後兜底滾動。
+ */
+/** 在 FB 語言選擇器（dialog / menu / 滾動列表）內找到並點擊 繁體中文(台灣)。
+ *  策略：① 等搜尋框出現 → 輸入 Taiwan 過濾 → 點第一個選項；② 兜底滾動點擊。
+ */
+async function clickTwOptionInPicker(page: any, log: (m: string) => void, shot?: (n: string) => Promise<void>): Promise<boolean> {
+  const sel = '[role="option"], [role="menuitem"], [role="radio"], [role="listitem"], a, button, div, span, li';
+
+  // 1) 優先：用搜尋框輸入 "Taiwan" 過濾
+  try {
+    const searchSels = [
+      'input[type="search"]',
+      'input[role="searchbox"]',
+      'input[placeholder*="Search" i]',
+      'input[placeholder*="Rechercher" i]',
+      'input[placeholder*="Buscar" i]',
+      'input[placeholder*="Procurar" i]',
+      'input[placeholder*="Suchen" i]',
+      'input[placeholder*="Cerca" i]',
+      'input[placeholder*="検索" i]',
+      'input[placeholder*="搜索" i]',
+      'input[aria-label*="Search" i]',
+      'input[aria-label*="Rechercher" i]',
+      'input[aria-label*="Buscar" i]',
+    ];
+    let sb: any = null;
+    for (const s of searchSels) {
+      const loc = page.locator(s).first();
+      if (await loc.count() > 0 && await loc.isVisible().catch(() => false)) { sb = loc; break; }
+    }
+    if (sb) {
+      await sb.scrollIntoViewIfNeeded({ timeout: 3000 });
+      await sb.click({ timeout: 5000 });
+      await human.randomDelay(300, 600);
+      // 清空並輸入 Taiwan；fill 對大部分 React input 有效，若無效再逐字輸入
+      try { await sb.fill(''); } catch {}
+      await sb.fill('Taiwan');
+      await human.randomDelay(1500, 2500);
+      if (shot) await shot('lang-05b-search-taiwan.png');
+      // 驗證搜尋框是否有值；若無值，改用逐字輸入
+      const val = await sb.inputValue().catch(() => '');
+      if (!val) {
+        await sb.click({ timeout: 3000 });
+        await page.keyboard.press('Control+a');
+        await page.keyboard.type('Taiwan', { delay: 50 });
+        await human.randomDelay(1500, 2500);
+        if (shot) await shot('lang-05c-search-retry.png');
+      }
+
+      // 過濾後在可見選項中找「繁體中文(台灣)」：必須同時含台灣 + 繁體指示，嚴格排除 English。
+      const opts = page.locator('[role="radio"], [role="option"], [role="listitem"], [role="menuitem"]').filter({ hasText: /Taiwan|台灣|台湾|繁體|正體|Traditional|tradicion|Traditionell/i });
+      const optN = await opts.count().catch(() => 0);
+      for (let i = 0; i < optN; i++) {
+        const el = opts.nth(i);
+        const txt = await el.textContent().catch(() => '');
+        if (isTwOption(txt)) {
+          await el.scrollIntoViewIfNeeded({ timeout: 3000 });
+          await el.click({ timeout: 6000 });
+          log('已點擊 繁體中文(台灣) 選項（搜尋框過濾 Taiwan）: ' + (txt || '').trim().slice(0, 40));
+          return true;
+        }
+      }
+      // 注意：絕不退回「點第一個選項」——那會誤點 English。沒命中就交給下方精確點擊兜底。
+    }
+  } catch (e: any) { log('[DIAG] 搜尋框策略失敗 ' + (e.message || e)); }
+
+  // 2) 兜底 A：在瀏覽器內找到含 Taiwan 文字的選項行並直接點擊
+  const tryClickOption = async (): Promise<boolean> => {
+    return page.evaluate(() => {
+      const isTw = (t: string) => {
+        const s = (t || '').toLowerCase();
+        return (/台灣|台湾|taiwan|taïwan|taiwán/.test(s)) && (/繁體|正體|traditional|tradicion|traditionell/.test(s));
+      };
+      const candidates = Array.from(document.querySelectorAll('[role="radio"], [role="option"], [role="listitem"], [role="menuitem"], div, span, a, button, li'));
+      for (const row of candidates) {
+        if (isTw((row.textContent || ''))) {
+          try {
+            (row as any).scrollIntoView({ block: 'center', behavior: 'instant' });
+            (row as any).click();
+            return true;
+          } catch { /* continue */ }
+        }
+      }
+      return false;
+    });
+  };
+  for (let attempt = 0; attempt < 6; attempt++) {
+    if (await tryClickOption()) {
+      log('已點擊 繁體中文(台灣) 選項 (evaluate click attempt ' + attempt + ')');
       return true;
     }
+    await page.evaluate(() => {
+      const containers = document.querySelectorAll('[role="dialog"] [class*="scroll"], [role="dialog"], [role="menu"], [aria-modal="true"], [role="listbox"]');
+      let scrolled = false;
+      (containers as any).forEach((c: any) => { try { c.scrollTop += 800; scrolled = true; } catch {} });
+      if (!scrolled) (window as any).scrollBy(0, 800);
+    }).catch(() => {});
+    await human.randomDelay(400, 800);
   }
 
-  // C) 兜底：直接找頁面上任何 繁體中文(台灣) 選項
-  if (await clickByTexts(page,
-      [
-        'Traditional Chinese (Taiwan)',
-        '繁體中文（台灣）', '繁體中文 (台灣)', '正體中文（台灣）', '中文(台灣)', '中文（台灣）',
-        'Chinois traditionnel (Taïwan)', 'Chinois traditionnel (Taiwan)',
-        'Chino tradicional (Taiwán)', 'Chino tradicional (Taiwan)',
-        'Chinês tradicional (Taiwan)',
-        'Traditionelles Chinesisch (Taiwan)',
-        'Cinese tradizionale (Taiwan)',
-        '繁体中文（台湾）', '繁體中文（台湾）',
-        '번체중국어(대만)'
-      ],
-      '[role="option"], a, button, div', 6000)) {
-    await clickByTexts(page, ['Save Changes', 'Change Language', '儲存變更', '變更', '確認', 'Save'], 'button', 3000).catch(() => {});
-    await human.randomDelay(600, 1200);
+  // 3) 兜底 B：Playwright locator 滾動 + 點擊
+  for (let attempt = 0; attempt < 6; attempt++) {
+    if (await clickTextRobust(page, TW_OPTION_TEXTS, sel, 6000)) {
+      log('已點擊 繁體中文(台灣) 選項 (locator attempt ' + attempt + ')');
+      return true;
+    }
+    await page.evaluate(() => {
+      const containers = document.querySelectorAll('[role="dialog"], [role="menu"], [aria-modal="true"], [role="listbox"], [class*="scroll"]');
+      let scrolled = false;
+      (containers as any).forEach((c: any) => { try { c.scrollTop += 600; scrolled = true; } catch {} });
+      if (!scrolled) (window as any).scrollBy(0, 600);
+    }).catch(() => {});
+    await human.randomDelay(400, 800);
+  }
+  return false;
+}
+
+/** 保存/確認按鈕的多語標籤（繁中/簡中/英/法/西/葡/德/意） */
+const SAVE_LABELS = ['Save Changes', 'Change Language', '儲存變更', '保存更改', '储存更改', '變更', '確認', '保存', '储存', 'Save', '完成', 'Done', 'Update', 'Enregistrer', 'Guardar', 'Salvar', 'Speichern', 'Salva', 'Continuer', 'Continue'];
+
+/** 關閉 FB 常見遮罩/彈窗（cookie 同意、通知授權、安全提醒），避免覆蓋語言面板 */
+async function dismissFbOverlays(page: any, log: (m: string) => void): Promise<void> {
+  const labels = ['Accept', 'Accept All', 'Allow', 'Allow All', 'Got it', 'Not Now', 'Not now',
+    '稍後', '稍后', '以後', '不，謝謝', '不用了', '关闭', '關閉', 'Close', 'Tout accepter', 'Accepter',
+    'Autoriser', 'Plus tard', 'Aceptar', 'Rechazar', 'Permitir', 'Ahora no', 'Akzeptieren', 'Alle ablehnen',
+    'Später', 'Nicht jetzt', 'Accetta', 'Rifiuta', 'Consenti', 'Più tardi', '允许', '允许全部', '稍后', '以后', '拒绝', '拒绝全部'];
+  for (let i = 0; i < 4; i++) {
+    const clicked = await clickTextRobust(page, labels, 'button, [role="button"], a, div').catch(() => false);
+    if (clicked) { log('[DIAG] 關閉彈窗標籤命中'); await human.randomDelay(500, 1000); }
+    else break;
+  }
+}
+
+/**
+ * 在 /settings?tab=language 頁將語言設為繁體中文(台灣)。
+ * 設計原則（用戶/審查規格）：
+ *   - 跳轉後先「校驗面板真的渲染」（URL 含 tab=language 且 DOM 含語言面板），否則重跳/觸發 tab 切換，不向下執行。
+ *   - 操作前自動關閉 cookie/通知/安全彈窗遮罩。
+ *   - 輸出詳細調試日誌 + 每步截圖到 G:/fbtest_shots/diag，禁止無日誌靜默跳過。
+ *   - 目標元素必須 visible+enabled+在視口+無遮罩；不滿足持續等待，逾時拋明確異常。
+ *   - 選中邏輯：優先原生 <select> 的 option[value=zh_TW]（並手動派發 change 事件）；否則自定義面板路徑。
+ */
+async function setLangOnSettingsPage(page: any, log: (m: string) => void): Promise<boolean> {
+  const DIAG = 'G:/fbtest_shots/diag';
+  try { fs.mkdirSync(DIAG, { recursive: true }); } catch {}
+  const shot = async (n: string) => { try { await page.screenshot({ path: DIAG + '/' + n }); log('[DIAG] shot ' + n); } catch (e: any) { log('[DIAG] shot fail ' + (e.message || e)); } };
+  const dumpDom = async (tag: string) => {
+    const info = await page.evaluate(() => {
+      const selects = Array.from(document.querySelectorAll('select')).map((s: any) => ({
+        id: s.id, name: s.name,
+        opts: Array.from(s.options).slice(0, 60).map((o: any) => ({ v: o.value, t: (o.textContent || '').trim().slice(0, 30) })),
+      }));
+      const overlays = Array.from(document.querySelectorAll('[role="dialog"],[aria-modal="true"],div[style*="position: fixed"]')).slice(0, 8)
+        .map((o: any) => ({ tag: o.tagName, cls: (o.className || '').toString().slice(0, 50), txt: (o.textContent || '').trim().slice(0, 30) }));
+      const langRows = Array.from(document.querySelectorAll('div,tr,li,section'))
+        .filter((e: any) => /語言|语言|Language|Langue|Idioma/i.test(e.textContent || ''))
+        .slice(0, 14).map((e: any) => (e.textContent || '').trim().slice(0, 50));
+      return { url: location.href, selects, overlays, langRows, bodyText: (document.body?.innerText || '').slice(0, 500) };
+    }).catch((e: any) => ({ err: e.message }));
+    log('[DIAG][' + tag + '] ' + JSON.stringify(info).slice(0, 2400));
+    try { fs.writeFileSync(DIAG + '/lang-dom-' + tag + '.json', JSON.stringify(info, null, 2)); } catch {}
+    return info;
+  };
+
+  /** 結構化導出：語言相關元素 + 其最近可點擊 Edit/Change 按鈕，寫檔便於離線分析真實 FB DOM */
+  const dumpStructure = async (tag: string) => {
+    try {
+      const data = await page.evaluate(() => {
+        const kw = /語言|语言|Language|Langue|Idioma/i;
+        const editKw = /edit|編輯|編輯|编辑|change|變更|变更|modifier|editar|modifica|bearbeiten|ändern/i;
+        const langOwn: any[] = [];
+        const all = Array.from(document.querySelectorAll('*'));
+        for (const e of all) {
+          const own = Array.from(e.childNodes).filter((n: any) => n.nodeType === 3).map((n: any) => n.textContent).join('');
+          if (kw.test(own)) {
+            let cur: any = e, btn: any = null;
+            for (let i = 0; i < 6 && cur; i++) {
+              const c: any = cur.querySelector('button, [role="button"], a, [role="link"]');
+              if (c) { btn = { tag: c.tagName, text: (c.textContent || '').trim().slice(0, 40), role: c.getAttribute('role'), aria: (c.getAttribute('aria-label') || '').slice(0, 50) }; break; }
+              cur = cur.parentElement;
+            }
+            langOwn.push({ tag: e.tagName, cls: (e.className || '').toString().slice(0, 40), own: own.trim().slice(0, 50), btn });
+          }
+        }
+        const editBtns: any[] = [];
+        const btns = Array.from(document.querySelectorAll('button, [role="button"], a, [role="link"]'));
+        for (const b of btns) {
+          const t = ((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || '')).trim();
+          if (!editKw.test(t)) continue;
+          let cur: any = (b as any).parentElement, langCtx = false;
+          for (let i = 0; i < 7 && cur; i++) { if (kw.test(cur.textContent || '')) { langCtx = true; break; } cur = cur.parentElement; }
+          editBtns.push({ text: t.slice(0, 40), langCtx, aria: (b.getAttribute('aria-label') || '').slice(0, 50) });
+        }
+        return { url: location.href, lang: document.documentElement.lang, title: document.title, langOwn: langOwn.slice(0, 30), editBtns: editBtns.slice(0, 30) };
+      }).catch((e: any) => ({ err: e.message }));
+      fs.writeFileSync(DIAG + '/lang-structure-' + tag + '.json', JSON.stringify(data, null, 2));
+      log('[DIAG] wrote structure ' + tag);
+    } catch (e: any) { log('[DIAG] structure fail ' + e.message); }
+  };
+
+  await shot('lang-01-nav.png');
+  await dumpDom('after-nav');
+  await dumpStructure('after-nav');
+
+  // 1) 校驗面板真的渲染：URL 含 tab=language 且 DOM 含語言面板節點
+  const ready = await page.evaluate(() => {
+    const urlOk = /tab=language/.test(location.href);
+    const hasPanel = /語言|语言|Language|Langue|Idioma/i.test(document.body?.innerText || '') && document.querySelectorAll('div,tr,li,section').length > 5;
+    return { urlOk, hasPanel };
+  }).catch(() => ({ urlOk: false, hasPanel: false }));
+  if (!ready.urlOk || !ready.hasPanel) {
+    log('[DIAG] 語言面板未就緒 urlOk=' + ready.urlOk + ' hasPanel=' + ready.hasPanel + ' → 重新跳轉');
+    await page.goto(`${FB_BASE}/settings?tab=language`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+    await human.randomDelay(1800, 2800);
+    await shot('lang-01b-renav.png');
+    await dumpDom('after-renav');
+  }
+
+  // 2) 關閉遮罩/彈窗（cookie/通知/安全提醒）
+  await dismissFbOverlays(page, log);
+  await shot('lang-02-after-overlay.png');
+
+  // 3) 詳細日誌：select 是否存在、可見、可達、是否被遮罩
+  const selInfo = await page.evaluate(() => {
+    const s: any = document.querySelector('select');
+    if (!s) return { hasSelect: false };
+    const r = s.getBoundingClientRect();
+    const cs = getComputedStyle(s);
+    const optZh = Array.from(s.options).find((o: any) => /zh[-_]?TW|Tradition|繁體|正體|中文/i.test(o.value + ' ' + (o.textContent || '')));
+    return {
+      hasSelect: true,
+      zhValue: optZh ? optZh.value : null,
+      zhText: optZh ? (optZh.textContent || '').trim() : null,
+      visible: r.width > 0 && r.height > 0,
+      rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+      disabled: !!s.disabled,
+      display: cs.display,
+      overlay: !!document.querySelector('[role="dialog"],[aria-modal="true"]'),
+    };
+  }).catch((e: any) => ({ err: e.message }));
+  log('[DIAG] selectInfo=' + JSON.stringify(selInfo));
+
+  // 4) 選中邏輯（原生 select 優先，value=zh_TW，並手動派發 change）
+  if (selInfo.hasSelect && selInfo.zhValue) {
+    const sel = page.locator('select').first();
+    await sel.scrollIntoViewIfNeeded({ timeout: 4000 }).catch((e: any) => log('[DIAG] scroll fail ' + e.message));
+    const box = await sel.boundingBox().catch(() => null);
+    if (!box) { log('【語言下拉組件未就緒，任務終止】select 不可見/不在視口'); return false; }
+    await sel.selectOption({ value: selInfo.zhValue }).catch((e: any) => log('[DIAG] selectOption fail ' + e.message));
+    await page.evaluate(() => { const s: any = document.querySelector('select'); if (s) s.dispatchEvent(new Event('change', { bubbles: true })); }).catch(() => {});
+    await human.randomDelay(500, 1000);
+    await shot('lang-03-select-chosen.png');
+    await clickTextRobust(page, SAVE_LABELS, 'button');
+    await human.randomDelay(900, 1600);
+    await shot('lang-04-after-save.png');
     return true;
   }
+  if (selInfo.hasSelect && !selInfo.zhValue) {
+    log('【語言下拉組件未就緒】select 存在但找不到 zh_TW 選項，轉自定義面板路徑');
+  }
+
+  // 5) 自定義面板路徑（非 select）：精準點擊「語言行」的觸發元素（Edit 按鈕 或 可點擊語言行本身）
+  //    ⚠️ 死區點擊修正：舊邏輯用 .first() 選到最大的祖先容器 div，點擊幾何中心命中空白死區，picker 從未展開。
+  //    新邏輯：
+  //      (a) 優先找 Edit/Change/編輯/變更… 按鈕（部分語系有）；
+  //      (b) 再直接用 Playwright locator 選「含帳號語言文字的可點擊行」（a / [role="button"] / [role="link"] / [role="listitem"] / div[tabindex]），
+  //          點擊第一個可見元素；
+  //      (c) 若 locator 不可見，退回到 evaluate 內直接 element.click()，確保真的點到。
+  let clickedTrigger = false;
+  const langRowTexts = [
+    'Langue du compte', 'Langue de l\'application',
+    'Account Language', 'App Language',
+    '帳號語言', '應用程式語言', '账户语言', '应用语言',
+    'Idioma de la cuenta', 'Idioma de la aplicación',
+    'Idioma do aplicativo', 'Idioma da conta',
+    'Sprache des Kontos', 'Sprache der App',
+    'Lingua dell\'account', 'Lingua dell\'app',
+  ];
+  const editLabels = ['Edit', '編輯', '编辑', 'Change', '變更', '变更', '修改', 'Modifier', 'Editar', 'Modifica', 'Bearbeiten', 'Ändern'];
+
+  // (a) 優先點 Edit/Change 按鈕
+  if (await clickTextRobust(page, editLabels, 'button, [role="button"], a, [role="link"]', 5000)) {
+    log('[DIAG] 已點擊語言行的 Edit/Change 按鈕');
+    clickedTrigger = true;
+  }
+
+  // (b) 點擊語言行本身（Playwright locator 真實點擊）
+  if (!clickedTrigger) {
+    const rowSel = 'a, [role="button"], [role="link"], [role="listitem"], div[tabindex], div[role="listitem"]'
+    for (const rawTxt of langRowTexts) {
+      const txt = rawTxt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const loc = page.locator(rowSel).filter({ hasText: new RegExp(txt, 'i') });
+      const n = await loc.count().catch(() => 0);
+      for (let i = 0; i < n; i++) {
+        const el = loc.nth(i);
+        try {
+          await el.scrollIntoViewIfNeeded({ timeout: 3000 });
+          if (await el.isVisible().catch(() => false) && await el.isEnabled().catch(() => false)) {
+            await el.click({ timeout: 6000 });
+            log('[DIAG] 已真實點擊語言行：' + txt + ' (idx=' + i + ')');
+            clickedTrigger = true;
+            break;
+          }
+        } catch (e: any) { log('[DIAG] 語言行點擊失敗 ' + txt + ' idx=' + i + ' ' + (e.message || e)); }
+      }
+      if (clickedTrigger) break;
+    }
+  }
+
+  // (c) 兜底：在瀏覽器上下文中找到含語言文字的最小可點擊元素，直接 element.click()
+  if (!clickedTrigger) {
+    const clickedInPage = await page.evaluate(() => {
+      const kw = /語言|语言|Language|Langue|Idioma/i;
+      const clickSel = 'button,[role="button"],a,[role="link"],div[onclick],span[onclick],li[role="button"],div[tabindex],div[role="listitem"]';
+      const all = Array.from(document.querySelectorAll('*'));
+      for (const e of all) {
+        const own = Array.from(e.childNodes).filter((n: any) => n.nodeType === 3).map((n: any) => n.textContent).join('');
+        if (!kw.test(own)) continue;
+        let cur: any = e;
+        for (let i = 0; i < 6 && cur; i++) {
+          if (cur.matches && cur.matches(clickSel)) {
+            try { cur.scrollIntoView({ block: 'center' }); cur.click(); return true; } catch { /* continue */ }
+          }
+          cur = cur.parentElement;
+        }
+      }
+      return false;
+    }).catch(() => false);
+    if (clickedInPage) {
+      log('[DIAG] 已在瀏覽器內直接點擊語言觸發元素');
+      clickedTrigger = true;
+    }
+  }
+
+  if (clickedTrigger) {
+    await shot('lang-05-picker-open.png');
+    await dumpDom('picker-open');
+    await dumpStructure('picker-open');
+    // 等待選擇器 / dialog / listbox 出現，或頁面文本出現繁中選項
+    await page.waitForFunction(() =>
+      !!document.querySelector('[role="dialog"],[role="listbox"],[role="menu"],[aria-modal="true"]') ||
+      /Traditional Chinese|繁體中文|正體中文|中文\(台灣\)|中文（台灣）/i.test(document.body?.innerText || ''),
+      { timeout: 9000 }
+    ).catch(() => log('[DIAG] 等待選擇器出現逾時，繼續嘗試'));
+    // 等選擇器內容完全渲染（搜尋框出現）
+    await page.waitForSelector('input[type="search"], input[role="searchbox"], input[placeholder*="Search" i], input[placeholder*="Rechercher" i], input[placeholder*="Buscar" i], input[placeholder*="Procurar" i]', { timeout: 8000 }).catch(() => {});
+    await human.randomDelay(800, 1500);
+    if (await clickTwOptionInPicker(page, log, shot)) {
+        await shot('lang-06-tw-chosen.png');
+        await human.randomDelay(800, 1500);
+
+        // FB 語言變更後常彈出「Refresh the page / 重新整理頁面」對話框：點 OK/Aceptar 讓頁面 reload
+        const refreshClicked = await clickTextRobust(page, ['OK', 'Refresh', '重新整理', 'Actualiser', 'Actualizar', 'Recargar', 'Ricarica', 'Aktualisieren', 'Aktualizovať', 'Confirm', 'Aceptar', 'Aceptar cambios', 'Guardar cambios', 'Save Changes'], 'button, [role="button"]', 4000);
+        if (refreshClicked) {
+          log('[DIAG] 已點擊 Refresh 對話框 OK，等待頁面重新載入');
+          await page.waitForLoadState('domcontentloaded', { timeout: 20000 }).catch(() => {});
+          await human.randomDelay(1500, 2500);
+        } else {
+          // 若沒有 refresh 對話框，嘗試點保存/完成按鈕（部分版本需要）
+          if (await clickTextRobust(page, SAVE_LABELS, 'button, [role="button"]', 4000)) {
+            log('[DIAG] 已點擊保存/完成按鈕');
+          }
+        }
+        await shot('lang-07-after-save.png');
+        await dumpStructure('after-save');
+        return true;
+      }
+  } else {
+    log('【語言觸發元素未找到，任務終止】');
+  }
+
+  // 6) 兜底
+  if (await clickTwOptionInPicker(page, log, shot)) {
+    await clickTextRobust(page, SAVE_LABELS, 'button');
+    await human.randomDelay(900, 1600);
+    await shot('lang-08-fallback-save.png');
+    return true;
+  }
+  log('【語言設置頁所有路徑均失敗】未找到可點擊的繁體中文(台灣)選項');
+  await shot('lang-99-failed.png');
   return false;
 }
 
@@ -1604,8 +2112,7 @@ export async function skillSetLanguageTaiwan(ctx: SkillContext): Promise<SkillRe
   const log = (m: string) => console.log(`[setLangTW ${accountId}] ${m}`);
   try {
     // 0) 冪等檢測：已在任意已登入頁時，直接讀 <html lang>；已是繁體中文(台灣) 即視為完成，不重複操作
-    const alreadyTw = await isFbLangTw(page);
-    if (alreadyTw) {
+    if (await isFbLangTw(page)) {
       log('檢測到 <html lang> 已為繁體中文(台灣)，無需變更');
       return { success: true, action: 'set_language_tw', data: { language: 'zh-TW', path: 'already_set' } };
     }
@@ -1613,13 +2120,11 @@ export async function skillSetLanguageTaiwan(ctx: SkillContext): Promise<SkillRe
 
     // 1) 真實 FB 頭像選單路徑（與真人操作一致：頭像 → Settings & privacy → Language → 選 繁體中文(台灣)）
     const okMenu = await setLangViaAccountMenu(page, log, accountId);
-    if (okMenu && await isFbLangTw(page)) {
+    if (okMenu && await pollIsFbLangTw(page)) {
       return { success: true, action: 'set_language_tw', data: { language: 'zh-TW', path: 'account_menu' } };
     }
     if (okMenu) {
-      // 頭像選單流程已跑但 lang 尚未刷新：FB 偶爾延遲更新 lang 屬性，視為已送出
-      log('頭像選單流程已執行，lang 屬性尚未刷新，視為已送出');
-      return { success: true, action: 'set_language_tw', data: { language: 'zh-TW', path: 'account_menu', note: '已送出但尚未從 lang 屬性確認' } };
+      log('頭像選單流程已執行，但 lang 仍未刷新，繼續嘗試其他路徑');
     }
 
     // 2) fallback：直接走 /settings?tab=language（免頭像選單點擊；同時處理 <select> 與展開式「帳號語言」行）
@@ -1633,11 +2138,19 @@ export async function skillSetLanguageTaiwan(ctx: SkillContext): Promise<SkillRe
     }
 
     if (await setLangOnSettingsPage(page, log)) {
-      await human.randomDelay(600, 1200);
-      if (await isFbLangTw(page)) {
+      if (await pollIsFbLangTw(page)) {
         return { success: true, action: 'set_language_tw', data: { language: 'zh-TW', path: 'settings_page' } };
       }
-      return { success: true, action: 'set_language_tw', data: { language: 'zh-TW', path: 'settings_page', note: '已送出但尚未從 lang 屬性確認' } };
+      log('設定頁已送出，但 lang 仍未刷新，reload 後重試一次');
+    }
+
+    // 3) 重試：reload 後再次走設定頁（FB 部分版本需 reload 才渲染選擇器；嚴禁用 URL locale 參數切語言）
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+    await human.randomDelay(1000, 1800);
+    if (await setLangOnSettingsPage(page, log)) {
+      if (await pollIsFbLangTw(page)) {
+        return { success: true, action: 'set_language_tw', data: { language: 'zh-TW', path: 'settings_page_retry' } };
+      }
     }
 
     return { success: false, action: 'set_language_tw', error: '所有路徑皆未能將語言設為 繁體中文(台灣)' };

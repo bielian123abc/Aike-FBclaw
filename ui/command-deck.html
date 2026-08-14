@@ -155,10 +155,10 @@ body {
   border-bottom:1px solid var(--border);
   display:flex; align-items:center; gap:14px; padding:0 20px; z-index:9;
 }
-.topbar-title { display:flex; flex-direction:column; margin-right:auto; line-height:1.2; }
-.topbar-title .tt-main { font-size:17px; font-weight:800; color:var(--text-1); letter-spacing:.2px; }
-.topbar-title .tt-crumb { font-family:var(--font-mono); font-size:10px; color:var(--text-3); }
-.sys-strip { display:flex; align-items:center; gap:10px; }
+.topbar-title { display:flex; flex-direction:column; flex:1; min-width:0; margin-right:auto; line-height:1.2; }
+.topbar-title .tt-main { font-size:17px; font-weight:800; color:var(--text-1); letter-spacing:.2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.topbar-title .tt-crumb { font-family:var(--font-mono); font-size:10px; color:var(--text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sys-strip { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
 .sys-strip .sys-pill {
   display:inline-flex; align-items:center; gap:6px;
   padding:4px 11px; border-radius:20px;
@@ -169,7 +169,7 @@ body {
 .pdot.ok { background:var(--success); box-shadow:0 0 5px rgba(16,185,129,.6); }
 .pdot.warn { background:var(--warning); box-shadow:0 0 5px rgba(245,158,11,.6); }
 .pdot.ai { background:var(--violet); box-shadow:0 0 5px rgba(124,58,237,.6); }
-.topbar-actions { display:flex; align-items:center; gap:5px; }
+.topbar-actions { display:flex; align-items:center; gap:5px; flex-wrap:wrap; justify-content:flex-end; }
 
 /* —— 按钮 —— */
 .btn {
@@ -404,7 +404,7 @@ body {
 .task-bottom { display:flex; gap:8px; flex-wrap:wrap; }
 
 /* ============ AI 对话 ============ */
-.chat-shell { display:flex; flex-direction:column; height:calc(100vh - 56px - 44px - 64px); }
+.chat-shell { display:flex; flex-direction:column; flex:1; min-height:0; }
 .chat-msgs { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding:6px 4px; }
 .chat-msgs::-webkit-scrollbar { width:4px; }
 .chat-msgs::-webkit-scrollbar-thumb { background:rgba(37,99,255,.16); border-radius:2px; }
@@ -472,7 +472,7 @@ body {
   50%{box-shadow:0 8px 34px rgba(37,99,255,.5),0 0 70px rgba(124,58,237,.28);} }
 .fab:hover { transform:scale(1.08); }
 .fab.active { animation:none; }
-.chat-float { position:fixed; bottom:94px; right:26px; width:400px; height:520px;
+.chat-float { position:fixed; bottom:94px; right:26px; width:400px; max-width:92vw; height:520px;
   background:rgba(255,255,255,.94); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
   border:1px solid rgba(37,99,255,.18); border-radius:18px;
   box-shadow:0 16px 56px rgba(23,32,58,.14), 0 0 70px rgba(37,99,255,.09);
@@ -548,9 +548,9 @@ body {
 .stat-pill { background:var(--bg-input); border:1px solid var(--border); border-radius:12px; padding:10px 16px; }
 .stat-pill .sp-num { font-family:var(--font-mono); font-size:20px; font-weight:800; color:var(--primary); }
 .stat-pill .sp-lbl { font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:.5px; }
-.data-table { width:100%; border-collapse:collapse; font-size:12px; }
+.data-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
 .data-table th { text-align:left; background:var(--bg-input); padding:10px 12px; font-size:10px; color:var(--text-3); text-transform:uppercase; border-radius:8px; }
-.data-table td { padding:10px 12px; border-bottom:1px solid var(--border); color:var(--text-2); vertical-align:top; }
+.data-table td { padding:10px 12px; border-bottom:1px solid var(--border); color:var(--text-2); vertical-align:top; word-break:break-word; overflow-wrap:anywhere; }
 .data-table tr:hover td { background:var(--bg-hover); }
 code { background:var(--bg-input); border:1px solid var(--border); border-radius:5px; padding:1px 6px; font-family:var(--font-mono); font-size:11px; color:var(--primary); }
 .sess-strip { display:flex; gap:12px; overflow-x:auto; padding-bottom:6px; }
@@ -566,6 +566,37 @@ code { background:var(--bg-input); border:1px solid var(--border); border-radius
 .sess-row .k { color:var(--text-3); } .sess-row .v { color:var(--text-2); font-family:var(--font-mono); font-weight:600; }
 .sess-prog { height:5px; background:var(--bg-input); border-radius:3px; margin-top:8px; overflow:hidden; }
 .sess-prog i { display:block; height:100%; background:var(--grad-main); border-radius:3px; }
+
+/* --- 账号环境页 · 代理文本截断 --- */
+.acct-grid .glass-card .sess-row { gap:10px; align-items:center; }
+.acct-grid .glass-card .sess-row .k { flex-shrink:0; }
+.acct-grid .glass-card .sess-row .v { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.acct-grid .glass-card .proxy-line { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+.acct-grid .glass-card .proxy-mute { color:var(--text-3); font-size:10.5px; }
+
+/* --- 代理池表格 · 长文本截断 --- */
+.proxy-table { table-layout:fixed; }
+.proxy-table th, .proxy-table td { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.proxy-table th:nth-child(1), .proxy-table td:nth-child(1) { width:28%; }
+.proxy-table th:nth-child(2), .proxy-table td:nth-child(2) { width:22%; }
+.proxy-table th:nth-child(3), .proxy-table td:nth-child(3) { width:12%; }
+.proxy-table th:nth-child(4), .proxy-table td:nth-child(4) { width:12%; }
+.proxy-table th:nth-child(5), .proxy-table td:nth-child(5) { width:13%; }
+.proxy-table th:nth-child(6), .proxy-table td:nth-child(6) { width:13%; }
+.proxy-table td .proxy-cell { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* --- 响应式降列（窄窗保护，避免擁擠/溢出） --- */
+@media (max-width:1200px){
+  .vitals-grid { grid-template-columns:repeat(2,1fr); }
+  .deck-mid { grid-template-columns:1fr; }
+  .deck-bottom { grid-template-columns:1fr; }
+  .task-top { grid-template-columns:1fr; }
+  .acct-grid { grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); }
+}
+@media (max-width:760px){
+  .vitals-grid { grid-template-columns:1fr; }
+  .sys-strip, .topbar-actions { justify-content:flex-start; }
+}
 </style>
 </head>
 <body>
@@ -610,7 +641,6 @@ code { background:var(--bg-input); border:1px solid var(--border); border-radius
       <div class="nav-item" data-page="avatar"><span class="nav-icon">🖼️</span> 頭像管理<span class="nav-num">11</span></div>
       <div class="nav-item" data-page="skills"><span class="nav-icon">🎓</span> 技能中心<span class="nav-num">12</span></div>
       <div class="nav-item" data-page="memory"><span class="nav-icon">💾</span> 記憶體<span class="nav-num">13</span></div>
-      <div class="nav-item" data-page="openclaw"><span class="nav-icon">🦞</span> OpenClaw 終端<span class="nav-num">14</span></div>
     </nav>
     <div class="sidebar-footer"><span class="status-dot"></span> Gateway · Online</div>
   </aside>
@@ -921,7 +951,7 @@ code { background:var(--bg-input); border:1px solid var(--border); border-radius
       </div>
 
       <!-- ============ 帳號環境 ============ -->
-      <div class="page" id="page-account">
+      <div class="page active" id="page-account">
         <div class="acct-toolbar">
           <div class="search-box"><span>🔍</span><input id="acctSearch" type="text" placeholder="搜尋帳號 / 郵箱…" oninput="renderAccounts()"></div>
           <span class="filter-chip active" data-f="all">全部 <b id="cntAll">0</b></span>
@@ -1006,7 +1036,7 @@ code { background:var(--bg-input); border:1px solid var(--border); border-radius
 
       <!-- ============ AI 對話 ============ -->
       <div class="page" id="page-clawchat">
-        <div class="glass-card" style="height:calc(100vh - 56px - 44px - 80px);display:flex;flex-direction:column;">
+        <div class="glass-card" style="height:calc(100vh - 103px);display:flex;flex-direction:column;">
           <div class="card-title" style="flex-shrink:0;">
             <span class="title-icon">🧠</span> OpenClaw AI 對話
             <span class="title-badge">POST /api/chat</span>
@@ -1036,34 +1066,6 @@ code { background:var(--bg-input); border:1px solid var(--border); border-radius
         </div>
       </div>
 
-      <!-- ============ OpenClaw 終端（原始模式 + 進化記憶） ============ -->
-      <div class="page" id="page-openclaw">
-        <div class="glass-card" style="height:calc(100vh - 56px - 44px - 80px);display:flex;flex-direction:column;">
-          <div class="card-title" style="flex-shrink:0;">
-            <span class="title-icon">🦞</span> OpenClaw 終端
-            <span class="title-badge" id="termModeBadge">智能體模式</span>
-            <div style="margin-left:auto;display:flex;gap:8px;">
-              <button class="btn btn-sm" id="btnModeSmart" onclick="setTermMode('smart')">🧠 智能體模式</button>
-              <button class="btn btn-sm" id="btnModeRaw" onclick="setTermMode('raw')">⚡ 原始模式</button>
-              <button class="btn btn-sm btn-dark" onclick="loadTerminalMemory()">🧬 進化記憶</button>
-              <button class="btn btn-sm btn-dark" onclick="clearTerm()">🧹 清空</button>
-            </div>
-          </div>
-          <div class="chat-shell">
-            <div class="term-out" id="termOut">
-              <div class="term-line sys">OpenClaw 終端已就緒。這是智能體的「身體控制檯」：</div>
-              <div class="term-line sys">• 智能體模式：走 /api/chat，智能體可呼叫 FB 工具與程式碼/自我修復工具，並顯示每步執行紀錄。</div>
-              <div class="term-line sys">• 原始模式：直連底層 OpenClaw 智能體（/api/agent/raw），不經工具包裝，存取原生生態。</div>
-              <div class="term-line sys">下方輸入即可對話；可要求它 remember 經驗、evolve_skill 進化技能、read_file/edit_file 修復軟體。</div>
-            </div>
-            <div class="chat-bar">
-              <input class="chat-input" type="text" placeholder="對 OpenClaw 智能體說話，或下指令…" id="termInput" onkeydown="if(event.key==='Enter')sendTerminal()">
-              <button class="btn btn-primary btn-sm" onclick="sendTerminal()">發送 ▶</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- ============ 代理池 ============ -->
       <div class="page" id="page-proxy">
         <div class="glass-card">
@@ -1074,7 +1076,7 @@ code { background:var(--bg-input); border:1px solid var(--border); border-radius
             <button class="btn btn-sm btn-violet" onclick="autoAssignProxy()">🔗 自動分配</button>
             <button class="btn btn-sm btn-dark" onclick="exportProxyMap()">📥 匯出映射</button>
           </div>
-          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <table class="proxy-table" style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead><tr style="text-align:left;background:var(--bg-input);">
               <th style="padding:10px 12px;font-size:10px;color:var(--text-3);text-transform:uppercase;border-radius:10px 0 0 10px;">名稱</th>
               <th style="padding:10px 12px;font-size:10px;color:var(--text-3);text-transform:uppercase;">Host:Port</th>
@@ -1346,8 +1348,7 @@ const titleMap = {
   monitor:['全域監控','/ monitor'], account:['帳號環境管理','/ account'], proxy:['代理池管理','/ proxy'],
   task:['任務編排編輯器','/ task'], policy:['運營策略配置','/ policy'], source:['社團數據源','/ source'],
   clawchat:['OpenClaw AI 對話','/ clawchat'], report:['歷史任務報告','/ report'], server:['伺服器 & 模型','/ server'],
-  groups:['社團總覽','/ groups'], avatar:['頭像管理','/ avatar'], skills:['技能中心','/ skills'], memory:['記憶體','/ memory'],
-  openclaw:['OpenClaw 終端','/ openclaw']
+  groups:['社團總覽','/ groups'], avatar:['頭像管理','/ avatar'], skills:['技能中心','/ skills'], memory:['記憶體','/ memory']
 };
 navItems.forEach(item => item.addEventListener('click', () => {
   navItems.forEach(n => n.classList.remove('active')); item.classList.add('active');
@@ -1366,7 +1367,6 @@ navItems.forEach(item => item.addEventListener('click', () => {
   if(p==='server') loadServer();
   if(p==='groups') loadGroups();
   if(p==='avatar') loadAvatar();
-  if(p==='openclaw') loadTerminal();
 }));
 
 /* 功能 chips（任務編排）選中切換 */
@@ -1442,8 +1442,8 @@ function renderAccounts(accToProxy){
     const checked=selectedAccounts.includes(a.accountId)?'checked':'';
     const proxy=accToProxy[a.name]||accToProxy[a.accountId];
     const proxyCell = a.exitIp
-      ? '<span style="color:var(--teal)">出口 '+esc(a.exitIp)+'</span>'+(proxy?'<br><span style="font-size:11px;color:var(--text-3)">'+esc(proxy)+'</span>':'')
-      : (proxy?'<span style="color:var(--teal)">'+esc(proxy)+'</span>':'<span style="color:#d97706">未綁定代理</span>');
+      ? '<span class="proxy-line" style="color:var(--teal)" title="'+(proxy?esc(proxy):'')+'">出口 '+esc(a.exitIp)+'</span>'
+      : (proxy?'<span class="proxy-line" style="color:var(--teal)" title="'+esc(proxy)+'">'+esc(proxy)+'</span>':'<span style="color:#d97706">未綁定代理</span>');
     const em=AVATARS[i%AVATARS.length];
     return '<div class="glass-card" style="position:relative;padding:14px;">'
       + '<label style="position:absolute;top:12px;right:12px;cursor:pointer;"><input type="checkbox" '+checked+' data-id="'+esc(a.accountId)+'" onchange="toggleAcc(this.dataset.id,this.checked)"></label>'
@@ -1485,13 +1485,14 @@ async function loadProxies(){
       const st=px.alive?'<span class="badge badge-success">線上</span>':'<span class="badge badge-error">離線</span>';
       const lat=(px.alive && px.latency!=null && px.latency>=0)?(px.latency+' ms'):'—';
       const hostport=esc(px.host+':'+px.port);
+      const name=esc(px.name||hostport);
       const bound=px.boundAccount?esc(px.boundAccount):'<span style="color:var(--text-3)">—</span>';
       const act = px.boundAccount
         ? '<button class="btn btn-sm btn-dark" onclick="unbindProxy(\''+esc(px.id)+'\')">解綁</button>'
         : '<button class="btn btn-sm btn-violet" onclick="autoAssignProxy()">分配</button>';
       return '<tr>'
-        +'<td style="padding:11px 12px;font-family:var(--font-sans);font-weight:700;">'+esc(px.name||hostport)+'</td>'
-        +'<td style="padding:11px 12px;color:var(--text-2);">'+hostport+'</td>'
+        +'<td style="padding:11px 12px;" title="'+name+'"><span class="proxy-cell" style="font-family:var(--font-sans);font-weight:700;">'+name+'</span></td>'
+        +'<td style="padding:11px 12px;color:var(--text-2);" title="'+hostport+'"><span class="proxy-cell">'+hostport+'</span></td>'
         +'<td style="padding:11px 12px;">'+st+'</td>'
         +'<td style="padding:11px 12px;color:var(--text-2);">'+lat+'</td>'
         +'<td style="padding:11px 12px;">'+bound+'</td>'
@@ -1588,22 +1589,34 @@ async function runTask(type, params, accountId){
   const r=await fetch('/api/task/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:accountId, type:type, params:params||{}})});
   return await r.json();
 }
-async function runSmartSequence(ids){
+// AI 智能执行（真 AI 大脑规划 + 针对已登录账号智能分配）。
+// 没有配置模型 API / 没有已登录账号时，server 端 smart-execute 会直接拒绝（返回 ok:false + 提示），
+// 不再像旧版那样「没 API 也在跑脚本」——那才是用户反对的摆设行为。
+async function runAiSmartExecute(accountIds){
   abortFlag=false;
-  const seq=['sync','browse_feed','add_friends','join_groups','greet_new_friends','ai_chat_reply'];
-  for(const id of ids){
-    if(abortFlag){ showToast('已終止','warn'); break; }
-    showToast('智能執行 '+id);
-    for(const step of seq){
-      if(abortFlag) break;
-      try{ await runTask(step, paramsFor(step), id); }catch(e){ showToast(id+' '+step+' 異常: '+(e.message||e),'error'); }
-      await new Promise(r=>setTimeout(r,800));
+  showToast('AI 智能执行：正在请求 OpenClaw 规划…');
+  try{
+    const body={};
+    if(accountIds) body.accountIds=accountIds;
+    const r=await fetch('/api/agent/smart-execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const j=await r.json();
+    if(!(j.ok||j.success)){ showToast(j.error||'AI 智能执行失败','error'); return; }
+    const plan=j.plan||{accounts:[]};
+    showToast('AI 规划完成：'+plan.accounts.length+' 个账号');
+    for(const a of plan.accounts){
+      if(abortFlag){ showToast('已終止','warn'); break; }
+      for(const act of a.actions){
+        if(abortFlag) break;
+        showToast('运行中：'+a.accountId+' → '+act);
+        try{ await runTask(act, {}, a.accountId); }catch(e){ showToast(a.accountId+' '+act+' 異常: '+(e.message||e),'error'); }
+        await new Promise(r=>setTimeout(r,800));
+      }
     }
-  }
-  loadAccounts();
+    showToast('AI 智能执行完成','success'); loadAccounts();
+  }catch(e){ showToast('AI 智能执行異常：'+(e.message||e),'error'); }
 }
-function runSmart(id){ runSmartSequence([id]); }
-function runAllSmart(){ runSmartSequence(allAccounts.map(a=>a.accountId)); }
+function runSmart(id){ runAiSmartExecute([id]); }
+function runAllSmart(){ runAiSmartExecute(null); } // null = 由 server 针对当前已登录账号规划
 function runSelected(){
   const tasks=getSelectedTasks();
   if(!tasks.length){ showToast('請先在左側勾選功能，或直接點「全部執行」','warn'); return; }
@@ -1827,14 +1840,14 @@ async function saveOpenclaw(){
   const body={ baseUrl:$('ocBaseUrl').value, apiKey:$('ocApiKey').value, model:$('ocModel').value };
   const r=await fetch('/api/settings/openclaw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const j=await r.json();
-  showToast(j.ok?('已保存'+(j.applied?'，已套用到網關':'，但網關套用失敗：'+(j.error||''))):'保存失敗', j.ok?'success':'error');
+  showToast(j.success?('已保存'+(j.applied?'，已套用到網關':'，但網關套用失敗：'+(j.error||''))):'保存失敗', j.success?'success':'error');
   loadServer();
 }
 async function repairGateway(){
   showToast('修復中...');
   try{
     const r=await fetch('/api/openclaw/repair',{method:'POST'}); const j=await r.json();
-    let msg=(j.ok?'修復完成':'修復失敗：'+(j.error||''));
+    let msg=(j.success?'修復完成':'修復失敗：'+(j.error||''));
     if(j.steps) msg+='\n'+j.steps.join('\n');
     if(j.gatewayReachable!==undefined) msg+='\n網關可達：'+j.gatewayReachable;
     $('repairSteps').textContent=msg;
@@ -1844,7 +1857,7 @@ async function repairGateway(){
 async function supervisorAction(act){
   try{
     const r=await fetch('http://127.0.0.1:18992/'+act,{method:'POST'}); const j=await r.json();
-    showToast((j.ok?'已'+act:'操作失敗')+(j.serverPid?(' PID='+j.serverPid):''), j.ok?'success':'error');
+    showToast((j.ok||j.success?'已'+act:'操作失敗')+(j.serverPid?(' PID='+j.serverPid):''), (j.ok||j.success)?'success':'error');
   }catch(e){ showToast('監管未運行，無法操作（'+(e.message||e)+'）','error'); }
   setTimeout(loadServer,1200);
 }
@@ -1895,7 +1908,7 @@ async function uploadAvatar(input){
     const buf=await file.arrayBuffer();
     const r=await fetch('/api/avatar/upload',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(file.name)},body:buf});
     const j=await r.json();
-    showToast(j.ok?('已上傳 '+j.filename+'（'+(Math.round((j.size||0)/1024))+'KB）'):('上傳失敗：'+(j.error||'')), j.ok?'success':'error');
+    showToast((j.ok||j.success)?('已上傳 '+j.filename+'（'+(Math.round((j.size||0)/1024))+'KB）'):('上傳失敗：'+(j.error||'')), (j.ok||j.success)?'success':'error');
   }catch(e){ showToast('上傳異常：'+(e.message||e),'error'); }
   input.value=''; loadAvatar();
 }
@@ -1906,14 +1919,14 @@ async function applyAvatarToAccount(fn){
   try{
     const r=await fetch('/api/avatar/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:fn,accountId:accountId})});
     const j=await r.json();
-    if(j.ok){ showToast('頭像替換成功：'+accountId,'success'); }
+    if(j.ok||j.success){ showToast('頭像替換成功：'+accountId,'success'); }
     else { showToast('替換失敗：'+(j.error||JSON.stringify(j.data||'')),'error'); }
   }catch(e){ showToast('替換異常：'+(e.message||e),'error'); }
   loadAvatar();
 }
 async function markAvatarUsed(fn){
   const r=await fetch('/api/avatar/mark-used',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:fn})});
-  const j=await r.json(); showToast(j.ok?('已標記 '+fn):('失敗：'+(j.error||'')), j.ok?'success':'error'); loadAvatar();
+  const j=await r.json(); showToast((j.ok||j.success)?('已標記 '+fn):('失敗：'+(j.error||'')), (j.ok||j.success)?'success':'error'); loadAvatar();
 }
 
 /* ===================== 技能中心 ===================== */

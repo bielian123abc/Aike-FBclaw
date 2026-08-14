@@ -20,7 +20,7 @@ $env:PATH = "$nodeDir;$env:PATH"
 
 # API Key（若尚未設定則補預設；也可改由 .env 提供）
 if (-not $env:DEEPSEEK_API_KEY) {
-  $env:DEEPSEEK_API_KEY = "YOUR_DEEPSEEK_API_KEY"
+  $env:DEEPSEEK_API_KEY = "在此填入你的_DeepSeek_API_Key"
 }
 
 # 用 node 直接執行 electron cli（避免 .cmd 包裝閃出終端）

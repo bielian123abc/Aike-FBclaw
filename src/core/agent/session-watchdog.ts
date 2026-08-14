@@ -173,6 +173,15 @@ async function handleDead(accountId: string, reason: string): Promise<void> {
 async function probe(accountId: string): Promise<void> {
   const sess = getSession(accountId);
   if (!sess) { states.delete(accountId); return; }
+  // 手動 X 關窗 / 瀏覽器崩潰 → 連線斷開或已無 page：對賬帳號狀態為離線，
+  // 避免 UI 顯示「已打開」卻無視窗；下次點啟動也能真正重開。
+  const browserConnected = !!sess.context.browser()?.isConnected();
+  const hasPage = (sess.context.pages()?.length ?? 0) > 0;
+  if (!browserConnected || !hasPage) {
+    try { await closeSession(accountId); } catch {}
+    states.delete(accountId);
+    return;
+  }
   const page: any = sess.page;
 
   let url = '';

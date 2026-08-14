@@ -16,7 +16,7 @@
 import type { Page } from 'playwright-core';
 import { AccountMemory, StoredOnboardingState, OnboardingStepState } from '../memory/account-memory';
 import * as skills from '../skills/fb-core-skills';
-import { handleMessengerPin, isFbLangTw } from '../skills/fb-core-skills';
+import { isFbLangTw } from '../skills/fb-core-skills';
 import { accountHasAvatar } from './avatar';
 import { getAccount } from './account-store';
 import { ONBOARDING_SEED_LIKE_URL, MOCK_FB, MOCK_FB_PORT } from '../config';
@@ -87,38 +87,16 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     },
   },
 
-  // ③ Messenger 端對端加密 PIN
+  // ③ Messenger 端對端加密 PIN — ⚠️ 已閒置（2026-08-12 用戶指示）
+  //    不再強制建立/填寫，不阻擋 onboarding 完成；交由人工視情況處理。
+  //    若對話過程中 Messenger 真的跳出 PIN 對話框，仍由 task-runner / session-watchdog
+  //    的被動處理器隨機輔助（非強制），符合「人工看到了隨機輔助即可」。
   {
     id: 'pin',
-    label: 'Messenger 端對端加密 PIN',
-    detect: async (ctx) => {
-      if (isMockMode(ctx.accountId)) {
-        try {
-          await ctx.page.goto(mockBase() + '/settings/messenger-pin', { waitUntil: 'domcontentloaded', timeout: 20000 });
-          await randomDelay(500, 1000);
-          const pw = await ctx.page.$$('input[type="password"]');
-          if (pw.length > 0) return false; // 仍有設定對話框 => 尚未建立
-          const txt = await ctx.page.evaluate(() => (document.body?.innerText || '')).catch(() => '');
-          return /已設定|established|set up/i.test(txt);
-        } catch { return false; }
-      }
-      // real 模式：PIN 為被動觸發（對話框出現才處理），無法主動可靠檢測；依賴記憶體標記
-      const st = ctx.memory.getOnboarding()?.steps?.['pin'];
-      return !!st?.done;
-    },
-    run: async (ctx) => {
-      if (isMockMode(ctx.accountId)) {
-        try {
-          await ctx.page.goto(mockBase() + '/settings/messenger-pin', { waitUntil: 'domcontentloaded', timeout: 20000 });
-          await randomDelay(800, 1500);
-        } catch { /* 頁面若不存在則不強制（real 模式不會走到這裡） */ }
-      }
-      const r = await handleMessengerPin(ctx);
-      if (r.handled) return { ok: true };
-      if (r.error) return { ok: false, error: r.error };
-      // 當前頁面沒有 PIN 對話框 => 視為已建立（被動模式），標記完成
-      return { ok: true, skipped: true };
-    },
+    label: 'Messenger 端對端加密 PIN（閒置/可選）',
+    optional: true,
+    detect: async () => true, // 閒置：一律視為已滿足，不阻擋 allComplete
+    run: async () => ({ ok: true, skipped: true }), // 不主動導航 / 不強制填寫
   },
 
   // ④ 主頁點讚：指定種子粉絲頁（未配置 URL 時整步跳過）
